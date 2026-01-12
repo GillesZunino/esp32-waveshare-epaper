@@ -16,11 +16,10 @@ extern "C" {
 
 
 /**
- * @brief Handle to a Waveshare ePaper display device.
+ * @brief Handle to a Waveshare ePaper display context.
  */
 struct waveshare_epaper_context;
-typedef struct waveshare_epaper_context* waveshare_epaper_handle_t; ///< Handle to a Waveshare ePaper display device
-
+typedef struct waveshare_epaper_context* waveshare_epaper_handle_t; ///< Handle to a Waveshare ePaper display context
 
 /**
  * @brief Configuration of the SPI bus for MAX7219 / MAX7221 device.
