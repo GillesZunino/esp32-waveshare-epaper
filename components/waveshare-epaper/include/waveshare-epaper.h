@@ -18,8 +18,8 @@ extern "C" {
 /**
  * @brief Handle to a Waveshare ePaper display device.
  */
-struct waveshare_epaper_display;
-typedef struct waveshare_epaper_display* waveshare_epaper_handle_t; ///< Handle to a Waveshare ePaper display device
+struct waveshare_epaper_context;
+typedef struct waveshare_epaper_context* waveshare_epaper_handle_t; ///< Handle to a Waveshare ePaper display device
 
 
 /**

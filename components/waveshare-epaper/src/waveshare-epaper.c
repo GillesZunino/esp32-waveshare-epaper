@@ -5,15 +5,10 @@
 #include <esp_check.h>
 
 #include "waveshare-epaper.h"
+#include "waveshare-epaper-context.h"
 
 
 static const char* WaveshareEPaperLogTag = "wepd";
-
-
-typedef struct waveshare_epaper_display {
-    waveshare_epaper_hw_config_t hw_config;
-    spi_device_handle_t spi_device_handle;
-} waveshare_epaper_display_t;
 
 
 static inline esp_err_t enable_gpio_pins_private(const waveshare_epaper_hw_config_t* hw_config);
@@ -41,7 +36,7 @@ esp_err_t waveshare_epaper_driver_init(const waveshare_epaper_config_t* config, 
     //ESP_RETURN_ON_ERROR(check_driver_configuration_private(config), WaveshareEPaperLogTag, "Invalid configuration");
 
     // Allocate space for our handle
-    waveshare_epaper_display_t* pDisplay = heap_caps_calloc(1, sizeof(waveshare_epaper_display_t), MALLOC_CAP_DEFAULT);
+    waveshare_epaper_context_t* pDisplay = heap_caps_calloc(1, sizeof(waveshare_epaper_context_t), MALLOC_CAP_DEFAULT);
     if (pDisplay == NULL) {
         return ESP_ERR_NO_MEM;
     }
