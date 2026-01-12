@@ -1,0 +1,29 @@
+title: Waveshare e-Paper Display Driver for ESP32
+description: >-
+  A driver to control Waveshare e-Paper displays from ESP-IDF.
+
+plugins:
+  - jekyll-readme-index
+  - jekyll-relative-links
+
+readme_index:
+  enabled:          true
+  remove_originals: false
+  with_frontmatter: false
+
+relative_links:
+  enabled: true
+  collections: true
+
+highlighter: rouge
+
+gist:
+  noscript: false
+
+kramdown:
+  math_engine: mathjax
+  syntax_highlighter: rouge
+
+include:
+  - README.md
+  - LICENSE.md

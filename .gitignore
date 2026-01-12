@@ -1,0 +1,31 @@
+# Peripherial states
+**/.vscode/.espidf.peripherals.state.json
+
+# ESP-IDF menuconfig output
+sdkconfig
+sdkconfig.old
+
+# ESP-IDF debugger adapter intermediates
+debug.log
+esp-idf-vscode-generated.gdb
+
+# ESP-IDF build intermediates and output
+**/managed_components/**
+**/build*/**
+**/dist/**
+
+# Python environment files
+*.pyc
+*.pyo
+*.pyd
+**/__pycache__/
+**/*.egg-info/
+
+# Virtual environment folders
+**/venv/
+**/.venv/
+**/env/
+
+# Language Servers
+**/.clangd/
+**/.ccls-cache/

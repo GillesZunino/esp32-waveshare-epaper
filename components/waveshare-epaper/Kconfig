@@ -1,0 +1,13 @@
+# -----------------------------------------------------------------------------------
+# Copyright 2026, Gilles Zunino
+# -----------------------------------------------------------------------------------
+
+menu "Waveshare e-Paper Driver"
+
+    config WAVESHARE_EPAPER_ENABLE_DEBUG_LOG
+        bool "Enable Waveshare e-Paper debug log"
+        default n
+        help
+            whether to enable the debug log messages for the Waveshare e-Paper driver.
+            
+endmenu
