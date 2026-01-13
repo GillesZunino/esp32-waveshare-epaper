@@ -95,10 +95,10 @@ esp_err_t waveshare_epaper_driver_free(waveshare_epaper_handle_t handle);
  */
 esp_err_t set_epaper_power(waveshare_epaper_handle_t handle, bool on);
 
+esp_err_t reset_epaper_hardware(waveshare_epaper_handle_t handle);
 
 
-
-
+esp_err_t configure_the_thing(waveshare_epaper_handle_t handle);
 
 
 

@@ -58,29 +58,7 @@ esp_err_t waveshare_epaper_driver_init(const waveshare_epaper_config_t* config, 
     // }
 
     // Add an SPI device on the given bus - We accept the SPI bus configuration as is
-    // spi_device_interface_config_t spiDeviceInterfaceConfig = {
-    //     .command_bits = 0,
-    //     .address_bits = 0,
-    //     .dummy_bits = 0,
-
-    //     //
-    //     // Waveshare ePaper displays use Clock Polarity (CPOL) 0 and Clock Phase (CPHA) 0
-    //     //
-    //     .mode = 0,
-
-    //     .clock_source = config->spi_cfg.clock_source,
-    //     .clock_speed_hz = config->spi_cfg.clock_speed_hz,
-    //     .input_delay_ns = config->spi_cfg.input_delay_ns,
-
-    //     .spics_io_num = config->spi_cfg.spics_io_num,
-
-    //     .flags = 0,
-    //     .queue_size = config->spi_cfg.queue_size
-    // };
-
-    // ESP_GOTO_ON_ERROR(spi_bus_add_device(config->spi_cfg.host_id, &spiDeviceInterfaceConfig, &pDisplay->spi_device_handle), cleanup, WaveshareEPaperLogTag, "Failed to spi_bus_add_device()");
-    
-    ESP_GOTO_ON_ERROR(waveshare_epaper_spi_init_private(config, pDisplay), cleanup, WaveshareEPaperLogTag, "Failed to spi_bus_add_device()");
+    ESP_GOTO_ON_ERROR(waveshare_epaper_spi_init_private(config, pDisplay), cleanup, WaveshareEPaperLogTag, "Failed to configure SPI Master");
 
     pDisplay->hw_config = config->hw_config;
     *handle = pDisplay;
@@ -150,8 +128,27 @@ esp_err_t set_epaper_power(waveshare_epaper_handle_t handle, bool on) {
 }
 
 
+esp_err_t reset_epaper_hardware(waveshare_epaper_handle_t handle) {
+    if (handle->spi_device_handle == NULL) {
+#if CONFIG_WAVESHARE_EPAPER_ENABLE_DEBUG_LOG
+        ESP_LOGE(WaveshareEPaperLogTag, "handle must not be NULL");
+#endif
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    esp_err_t err = gpio_set_level(handle->hw_config.rst_io_num, 1);
+    vTaskDelay(pdMS_TO_TICKS(200 / portTICK_PERIOD_MS)); // TODO: 200 ms - Verify timings
+    gpio_set_level(handle->hw_config.rst_io_num, 0);
+    vTaskDelay(pdMS_TO_TICKS(2 / portTICK_PERIOD_MS));  // TODO 2ms - Verify timings
+    gpio_set_level(handle->hw_config.rst_io_num, 1);
+    vTaskDelay(pdMS_TO_TICKS(200 / portTICK_PERIOD_MS)); // TODO: 200 ms - Verify timings
+    return err;
+}
 
 
+esp_err_t configure_the_thing(waveshare_epaper_handle_t handle) {
+    return waveshare_epaper_spi_send(handle, 0x4D , (const uint8_t[]){0x78}, 1);
+}
 
 
 
@@ -214,6 +211,7 @@ cleanup:
 static esp_err_t set_epaper_power_private(gpio_num_t power_pin, bool enable) {
     return power_pin != GPIO_NUM_NC ? gpio_set_level(power_pin, enable ? 1 : 0) : ESP_OK;
 }
+
 
 static void free_driver_memory_private(waveshare_epaper_handle_t handle) {
     if (handle != NULL) {

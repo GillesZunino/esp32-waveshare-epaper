@@ -9,24 +9,29 @@
 #include "waveshare-epaper-spi.h"
 
 
+#define COMMAND_LEVEL 0
+#define DATA_LEVEL    1
 
 
 static void pre_spi_transaction_isr_callback(spi_transaction_t* t) {
     // ESP_EARLY_LOGV(TAG, "cs high %d.", ((eeprom_context_t*)t->user)->cfg.cs_io);
     // gpio_set_level(((eeprom_context_t*)t->user)->cfg.cs_io, 1);
+
+    uint32_t userContext = (uint32_t)t->user;
+    uint32_t dcLevel = userContext == 1 ? COMMAND_LEVEL : DATA_LEVEL;
+    // TODO: DO not hardcode the pin
+    //ESP_EARLY_LOGV("ISR SPI", "d/c -> %d.", dcLevel);
+    gpio_set_level(GPIO_NUM_14, dcLevel);
 }
 
 static void post_spi_transaction_isr_callback(spi_transaction_t* t) {
-    // gpio_set_level(((eeprom_context_t*)t->user)->cfg.cs_io, 0);
-    // ESP_EARLY_LOGV(TAG, "cs low %d.", ((eeprom_context_t*)t->user)->cfg.cs_io);
+    // TODO: DO not hardcode the pin
+    //ESP_EARLY_LOGV("ISR SPI", "d/c -> COMMAND_LEVEL");
+    gpio_set_level(GPIO_NUM_14, COMMAND_LEVEL);
 }
 
 
-
-
-
 esp_err_t waveshare_epaper_spi_init_private(const waveshare_epaper_config_t* config, waveshare_epaper_context_t* pDisplay) {
-    // Add an SPI device on the given bus - We accept the SPI bus configuration as is
     spi_device_interface_config_t spiDeviceInterfaceConfig = {
         .command_bits = 0,
         .address_bits = 0,
@@ -61,9 +66,6 @@ esp_err_t waveshare_epaper_spi_init_private(const waveshare_epaper_config_t* con
 }
 
 
-
-
-
 esp_err_t waveshare_epaper_spi_send(waveshare_epaper_handle_t handle, uint8_t command, const void* data, uint32_t data_len) {
     
     esp_err_t err = ESP_OK;
@@ -71,39 +73,41 @@ esp_err_t waveshare_epaper_spi_send(waveshare_epaper_handle_t handle, uint8_t co
 
         // Transaction for the command
         spi_transaction_t commandTransaction = {
-            .flags = 0,
-            .cmd = command,
+            .flags = SPI_TRANS_USE_TXDATA,
+            .cmd = 0,
             .addr = 0,
-            .length = 8,
+            .length = sizeof(command) * 8,
             .rxlength = 0,
             .override_freq_hz = 0,
-            .user = NULL,
-            .tx_buffer = NULL,
+            .user = (void*)1,
+            //.tx_buffer = NULL,
+            .tx_data[0] = command,
             .rx_buffer = NULL
         };
 
-        spi_device_queue_trans(handle->spi_device_handle, &commandTransaction, portMAX_DELAY);
+        err = spi_device_polling_transmit(handle->spi_device_handle, &commandTransaction);
 
         // Transaction for the data
+         bool useTxData = data_len <= 4;
         spi_transaction_t dataTransaction = {
-            .flags = 0,
+            .flags = useTxData ? SPI_TRANS_USE_TXDATA : 0,
             .cmd = 0,
             .addr = 0,
             .length = data_len * 8, // length in bits
             .rxlength = 0,
             .override_freq_hz = 0,
-            .user = NULL,
+            .user = (void*)10,
             .tx_buffer = data,
             .rx_buffer = NULL
         };
 
-        spi_device_queue_trans(handle->spi_device_handle, &dataTransaction, portMAX_DELAY);
+        if (useTxData) {
+            memcpy(dataTransaction.tx_data, data, data_len);
+        } else {
+            dataTransaction.tx_buffer = data;
+        }
 
-        spi_transaction_t* pCommandTransactionResult;
-        spi_transaction_t* pDataTransactionResult;
-
-        spi_device_get_trans_result(handle->spi_device_handle, &pCommandTransactionResult, portMAX_DELAY);
-        spi_device_get_trans_result(handle->spi_device_handle, &pDataTransactionResult, portMAX_DELAY);
+        err = spi_device_polling_transmit(handle->spi_device_handle, &dataTransaction);
 
     spi_device_release_bus(handle->spi_device_handle);
     
