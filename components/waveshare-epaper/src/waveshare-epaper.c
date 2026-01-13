@@ -6,6 +6,7 @@
 
 #include "waveshare-epaper.h"
 #include "waveshare-epaper-context.h"
+#include "waveshare-epaper-spi.h"
 
 
 static const char* WaveshareEPaperLogTag = "wepd";
@@ -57,28 +58,30 @@ esp_err_t waveshare_epaper_driver_init(const waveshare_epaper_config_t* config, 
     // }
 
     // Add an SPI device on the given bus - We accept the SPI bus configuration as is
-    spi_device_interface_config_t spiDeviceInterfaceConfig = {
-        .command_bits = 0,
-        .address_bits = 0,
-        .dummy_bits = 0,
+    // spi_device_interface_config_t spiDeviceInterfaceConfig = {
+    //     .command_bits = 0,
+    //     .address_bits = 0,
+    //     .dummy_bits = 0,
 
-        //
-        // Waveshare ePaper displays use Clock Polarity (CPOL) 0 and Clock Phase (CPHA) 0
-        //
-        .mode = 0,
+    //     //
+    //     // Waveshare ePaper displays use Clock Polarity (CPOL) 0 and Clock Phase (CPHA) 0
+    //     //
+    //     .mode = 0,
 
-        .clock_source = config->spi_cfg.clock_source,
-        .clock_speed_hz = config->spi_cfg.clock_speed_hz,
-        .input_delay_ns = config->spi_cfg.input_delay_ns,
+    //     .clock_source = config->spi_cfg.clock_source,
+    //     .clock_speed_hz = config->spi_cfg.clock_speed_hz,
+    //     .input_delay_ns = config->spi_cfg.input_delay_ns,
 
-        .spics_io_num = config->spi_cfg.spics_io_num,
+    //     .spics_io_num = config->spi_cfg.spics_io_num,
 
-        .flags = 0,
-        .queue_size = config->spi_cfg.queue_size
-    };
+    //     .flags = 0,
+    //     .queue_size = config->spi_cfg.queue_size
+    // };
 
-    ESP_GOTO_ON_ERROR(spi_bus_add_device(config->spi_cfg.host_id, &spiDeviceInterfaceConfig, &pDisplay->spi_device_handle), cleanup, WaveshareEPaperLogTag, "Failed to spi_bus_add_device()");
+    // ESP_GOTO_ON_ERROR(spi_bus_add_device(config->spi_cfg.host_id, &spiDeviceInterfaceConfig, &pDisplay->spi_device_handle), cleanup, WaveshareEPaperLogTag, "Failed to spi_bus_add_device()");
     
+    ESP_GOTO_ON_ERROR(waveshare_epaper_spi_init_private(config, pDisplay), cleanup, WaveshareEPaperLogTag, "Failed to spi_bus_add_device()");
+
     pDisplay->hw_config = config->hw_config;
     *handle = pDisplay;
 
