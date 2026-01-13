@@ -88,30 +88,31 @@ esp_err_t waveshare_epaper_spi_send(waveshare_epaper_handle_t handle, uint8_t co
         err = spi_device_polling_transmit(handle->spi_device_handle, &commandTransaction);
 
         // Transaction for the data
-         bool useTxData = data_len <= 4;
-        spi_transaction_t dataTransaction = {
-            .flags = useTxData ? SPI_TRANS_USE_TXDATA : 0,
-            .cmd = 0,
-            .addr = 0,
-            .length = data_len * 8, // length in bits
-            .rxlength = 0,
-            .override_freq_hz = 0,
-            .user = (void*)10,
-            .tx_buffer = data,
-            .rx_buffer = NULL
-        };
+        if ((data != NULL) && (data_len > 0)) {
+            bool useTxData = data_len <= 4;
+            spi_transaction_t dataTransaction = {
+                .flags = useTxData ? SPI_TRANS_USE_TXDATA : 0,
+                .cmd = 0,
+                .addr = 0,
+                .length = data_len * 8, // length in bits
+                .rxlength = 0,
+                .override_freq_hz = 0,
+                .user = (void*)10,
+                .tx_buffer = data,
+                .rx_buffer = NULL
+            };
 
-        if (useTxData) {
-            memcpy(dataTransaction.tx_data, data, data_len);
-        } else {
-            dataTransaction.tx_buffer = data;
+            if (useTxData) {
+                memcpy(dataTransaction.tx_data, data, data_len);
+            } else {
+                dataTransaction.tx_buffer = data;
+            }
+
+            err = spi_device_polling_transmit(handle->spi_device_handle, &dataTransaction);
         }
-
-        err = spi_device_polling_transmit(handle->spi_device_handle, &dataTransaction);
 
     spi_device_release_bus(handle->spi_device_handle);
     
     return err;
-
 }
 

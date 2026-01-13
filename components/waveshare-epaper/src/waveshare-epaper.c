@@ -8,6 +8,8 @@
 #include "waveshare-epaper-context.h"
 #include "waveshare-epaper-spi.h"
 
+#include "waveshare-2in15-epaper-commands.h"
+
 
 static const char* WaveshareEPaperLogTag = "wepd";
 
@@ -136,14 +138,50 @@ esp_err_t reset_epaper_hardware(waveshare_epaper_handle_t handle) {
         return ESP_ERR_INVALID_STATE;
     }
 
+    ESP_RETURN_ON_ERROR(gpio_set_level(handle->hw_config.rst_io_num, 1), WaveshareEPaperLogTag, "Failed to set RESET pin high");
+
+
+
     esp_err_t err = gpio_set_level(handle->hw_config.rst_io_num, 1);
     vTaskDelay(pdMS_TO_TICKS(200 / portTICK_PERIOD_MS)); // TODO: 200 ms - Verify timings
     gpio_set_level(handle->hw_config.rst_io_num, 0);
     vTaskDelay(pdMS_TO_TICKS(2 / portTICK_PERIOD_MS));  // TODO 2ms - Verify timings
     gpio_set_level(handle->hw_config.rst_io_num, 1);
     vTaskDelay(pdMS_TO_TICKS(200 / portTICK_PERIOD_MS)); // TODO: 200 ms - Verify timings
+
     return err;
 }
+
+
+esp_err_t waveshare_epaper_display_sleep(waveshare_epaper_handle_t handle) {
+    if (handle->spi_device_handle == NULL) {
+#if CONFIG_WAVESHARE_EPAPER_ENABLE_DEBUG_LOG
+        ESP_LOGE(WaveshareEPaperLogTag, "handle must not be NULL");
+#endif
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    return waveshare_epaper_spi_send(handle, WAVESHARE_EPD_CMD_DEEP_SLEEP , (const uint8_t[]){0xA5}, 1);
+}
+
+
+// TODO: Provide default for value
+esp_err_t waveshare_epaper_display_on_off(waveshare_epaper_handle_t handle, bool on, bool enableEpd) {
+    if (handle->spi_device_handle == NULL) {
+#if CONFIG_WAVESHARE_EPAPER_ENABLE_DEBUG_LOG
+        ESP_LOGE(WaveshareEPaperLogTag, "handle must not be NULL");
+#endif
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    waveshare_epaper_command_t command = on ? WAVESHARE_EPD_CMD_POWER_ON : WAVESHARE_EPD_CMD_POWER_OFF;
+    uint8_t data[1];
+    data[0] = on ? 0x06 : (enableEpd ? 0x01 : 0x00);
+    return waveshare_epaper_spi_send(handle, command, data, sizeof(data) / sizeof(data[0]));
+}
+
+
+
 
 
 esp_err_t configure_the_thing(waveshare_epaper_handle_t handle) {
