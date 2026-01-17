@@ -3,9 +3,6 @@
 
   "cmake.configureOnEdit": false,
   "cmake.configureOnOpen": false,
-  
-  "idf.telemetry": false,
-  "idf.showOnboardingOnInit": false,
 
   // Windows specific ESP IDF paths and tools
   "idf.espIdfPathWin": "D:\\espressif\\v5.5.2\\esp-idf",
@@ -30,6 +27,8 @@
     "IDF_TARGET": "esp32s3"
   },
 
+  "idf.extraCleanPaths": [ "sdkconfig", "sdkconfig.old", "managed_components" ],
+
   "idf.openOcdDebugLevel": 2,
   "idf.openOcdConfigs": [
     //
@@ -44,10 +43,12 @@
   ],
   "idf.openOcdLaunchArgs": [],
 
-  "idf.deleteComponentsOnFullClean": false,
   "idf.monitorNoReset": false,
   "idf.launchMonitorOnDebugSession": true,
   "idf.enableSizeTaskAfterBuildTask": true,
+
+  "idf.qemuDebugMonitor": true,
+  "idf.qemuExtraArgs": [],
 
   // SVD files from https://github.com/espressif/svd/tree/main/svd
   "idf.svdFilePath": "${workspaceFolder}/svd/${env:IDF_TARGET}.svd",
