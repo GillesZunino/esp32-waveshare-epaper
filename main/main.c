@@ -99,7 +99,8 @@ void app_main(void) {
 
     ESP_ERROR_CHECK(reset_epaper_hardware(waveshare_epaper_handle));
 
-    ESP_ERROR_CHECK(configure_the_thing(waveshare_epaper_handle));
+    ESP_ERROR_CHECK(test_spi_performance(waveshare_epaper_handle));
+    //ESP_ERROR_CHECK(waveshare_epaper_configure_display(waveshare_epaper_handle));
 
     ESP_ERROR_CHECK(set_epaper_power(waveshare_epaper_handle, false));
 

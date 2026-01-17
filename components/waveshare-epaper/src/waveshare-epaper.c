@@ -294,7 +294,7 @@ static DMA_ATTR init_sequence_item_t init_sequence[] = {
     }
 };
 
-esp_err_t configure_the_thing(waveshare_epaper_handle_t handle) {
+esp_err_t waveshare_epaper_configure_display(waveshare_epaper_handle_t handle) {
     for (uint16_t index = 0; index < sizeof(init_sequence) / sizeof(init_sequence_item_t); index++) {
         const init_sequence_item_t* item = &init_sequence[index];
         ESP_RETURN_ON_ERROR(waveshare_epaper_spi_send(handle, item->command, item->data, item->data_length), WaveshareEPaperLogTag, "Failed to send init sequence command (%d) 0x%02X", index, item->command);
@@ -303,6 +303,11 @@ esp_err_t configure_the_thing(waveshare_epaper_handle_t handle) {
     return ESP_OK;
 }
 
+
+esp_err_t test_spi_performance(waveshare_epaper_handle_t handle) {
+    // TODO: REMOVE. this is temporary to test the fastest way to send data over SPI with the logic analyser
+    return waveshare_epaper_spi_send(handle, 0x4D, (uint8_t[]){0x78}, 1);
+}
 
 
 
