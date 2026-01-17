@@ -102,7 +102,7 @@ esp_err_t waveshare_epaper_display_sleep(waveshare_epaper_handle_t handle);
 
 esp_err_t waveshare_epaper_display_on_off(waveshare_epaper_handle_t handle, bool on, bool enableEpd);
 
-
+esp_err_t waveshare_epaper_display_power_off_and_sleep(waveshare_epaper_handle_t handle);
 
 
 esp_err_t configure_the_thing(waveshare_epaper_handle_t handle);

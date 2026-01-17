@@ -112,6 +112,8 @@ esp_err_t waveshare_epaper_spi_send(waveshare_epaper_handle_t handle, uint8_t co
         }
 
     spi_device_release_bus(handle->spi_device_handle);
+
+    // TODO: Wait for BUSY to because "available"
     
     return err;
 }
