@@ -26,7 +26,15 @@ typedef struct waveshare_epaper_spi_isr_context {
 } waveshare_epaper_spi_isr_context_t;
 
 
-static esp_err_t waveshare_epaper_spi_send_private(waveshare_epaper_handle_t handle, uint8_t command, const void* data, uint32_t data_len, bool acquire_bus);
+static esp_err_t waveshare_epaper_spi_send_private(waveshare_epaper_handle_t handle, uint8_t command, const void* data, uint32_t data_len, bool acquire_bus, bool wait_on_busy);
+
+esp_err_t wait_for_non_busy(waveshare_epaper_context_t* pDisplay);
+
+static void setup_gpio_interrupt(gpio_num_t busy_pin, gpio_isr_t isr_handler);
+static esp_err_t wait_for_non_busy_polling(waveshare_epaper_context_t* pDisplay);
+static esp_err_t wait_for_non_busy_interupt(waveshare_epaper_context_t* pDisplay);
+static void IRAM_ATTR gpio_isr_handler_eventgroup(void* arg);
+static esp_err_t wait_for_pin_high_event_group();
 
 
 
@@ -82,16 +90,16 @@ esp_err_t waveshare_epaper_spi_init_private(const waveshare_epaper_config_t* con
 }
 
 
-esp_err_t waveshare_epaper_spi_send(waveshare_epaper_handle_t handle, uint8_t command, const void* data, uint32_t data_len) {
-    return waveshare_epaper_spi_send_private(handle, command, data, data_len, true);
+esp_err_t waveshare_epaper_spi_send(waveshare_epaper_handle_t handle, uint8_t command, const void* data, uint32_t data_len, bool wait_on_busy) {
+    return waveshare_epaper_spi_send_private(handle, command, data, data_len, true, wait_on_busy);
 }
 
-esp_err_t waveshare_epaper_spi_send_exclusive(waveshare_epaper_handle_t handle, uint8_t command, const void* data, uint32_t data_len) {
-    return waveshare_epaper_spi_send_private(handle, command, data, data_len, false);
+esp_err_t waveshare_epaper_spi_send_exclusive(waveshare_epaper_handle_t handle, uint8_t command, const void* data, uint32_t data_len, bool wait_on_busy) {
+    return waveshare_epaper_spi_send_private(handle, command, data, data_len, false, wait_on_busy);
 }
 
 
-static esp_err_t waveshare_epaper_spi_send_private(waveshare_epaper_handle_t handle, uint8_t command, const void* data, uint32_t data_len, bool acquire_bus) {
+static esp_err_t waveshare_epaper_spi_send_private(waveshare_epaper_handle_t handle, uint8_t command, const void* data, uint32_t data_len, bool acquire_bus, bool wait_on_busy) {
     
     // TODO; Compare speed of the following and choose the shortest overall transaction for one byte cmd and one byte data
     // * Manipulate D/C in interupt routines (before and after)
@@ -155,27 +163,36 @@ static esp_err_t waveshare_epaper_spi_send_private(waveshare_epaper_handle_t han
     }
 
     // TODO: Wait for BUSY to because "available"
-    
+    if (wait_on_busy) {
+        err = wait_for_non_busy(handle);
+    }
+
     return err;
 }
 
 
 esp_err_t wait_for_non_busy(waveshare_epaper_context_t* pDisplay) {
-    return ESP_OK;
+    return  wait_for_non_busy_polling(pDisplay);
 }
 
-static esp_err_t wait_for_non_busy_naive(waveshare_epaper_context_t* pDisplay) {
+
+// BUSY LOW -> idle
+// BUSY HIGH -> busy
+
+//-------------------- polling based ------------------------
+static esp_err_t wait_for_non_busy_polling(waveshare_epaper_context_t* pDisplay) {
     // EXPECT: 1 to 10ms ?
-    while (gpio_get_level(pDisplay->hw_config.busy_io_num) == 0) {
+    while (!gpio_get_level(pDisplay->hw_config.busy_io_num)) {
         vTaskDelay(pdMS_TO_TICKS(1));
     }
 
     return ESP_OK;
 }
-
+// --------------------------------------------------------
 
 // -------------------- semnaphore based ------------------------
-static SemaphoreHandle_t gpio_semaphore = NULL;
+static DMA_ATTR SemaphoreHandle_t gpio_semaphore = NULL;
+static bool irq_attr_initialized = false;
 
 static void IRAM_ATTR gpio_isr_handler(void* arg) {
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
@@ -185,20 +202,26 @@ static void IRAM_ATTR gpio_isr_handler(void* arg) {
     }
 }
 
-void setup_gpio_interrupt(gpio_num_t busy_pin, gpio_isr_t isr_handler) {
+static void setup_gpio_interrupt(gpio_num_t busy_pin, gpio_isr_t isr_handler) {
+    if (irq_attr_initialized) {
+        return;
+    }
+
     gpio_semaphore = xSemaphoreCreateBinary();
     
     gpio_config_t io_conf = {
         .pin_bit_mask = (1ULL << busy_pin),
         .mode = GPIO_MODE_INPUT,
         .pull_up_en = GPIO_PULLUP_DISABLE,
-        .pull_down_en = GPIO_PULLDOWN_ENABLE,
-        .intr_type = GPIO_INTR_POSEDGE  // Rising edge
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_NEGEDGE
     };
     gpio_config(&io_conf);
     
-    gpio_install_isr_service(0);
+    gpio_install_isr_service(ESP_INTR_FLAG_IRAM);
     gpio_isr_handler_add(busy_pin, isr_handler, NULL);
+
+    irq_attr_initialized = true;
 }
 
 static esp_err_t wait_for_non_busy_interupt(waveshare_epaper_context_t* pDisplay) {
@@ -226,9 +249,10 @@ static void IRAM_ATTR gpio_isr_handler_eventgroup(void* arg) {
     }
 }
 
-void wait_for_pin_high_event_group() {
+static esp_err_t wait_for_pin_high_event_group() {
     xEventGroupWaitBits(gpio_event_group, PIN_HIGH_BIT, 
                         pdTRUE, pdFALSE, portMAX_DELAY);
+            return ESP_OK;
 }
 // Use with
 //  setup_gpio_interrupt(handle->hw_config.busy_io_num, gpio_isr_handler_eventgroup);

@@ -14,9 +14,9 @@
 static const char* WaveshareEPaperLogTag = "wepd";
 
 
-static inline esp_err_t enable_gpio_pins_private(const waveshare_epaper_hw_config_t* hw_config);
-static inline esp_err_t disable_gpio_pins_private(const waveshare_epaper_hw_config_t* hw_config);
-static esp_err_t configure_gpio_pins_private(const waveshare_epaper_hw_config_t* hw_config, bool enable);
+static inline esp_err_t enable_gpio_pins_private(const waveshare_epaper_config_t* config);
+static inline esp_err_t disable_gpio_pins_private(const waveshare_epaper_config_t* config);
+static esp_err_t configure_gpio_pins_private(const waveshare_epaper_config_t* config, bool enable);
 
 static esp_err_t set_epaper_power_private(gpio_num_t power_pin, bool enable);
 
@@ -50,7 +50,7 @@ esp_err_t waveshare_epaper_driver_init(const waveshare_epaper_config_t* config, 
 
     // Configure GPIO pins to communicate with the Waveshare ePaper display
     esp_err_t ret = ESP_OK;
-    ESP_GOTO_ON_ERROR(enable_gpio_pins_private(&config->hw_config), cleanup, WaveshareEPaperLogTag, "Failed to configure GPIO pins");
+    ESP_GOTO_ON_ERROR(enable_gpio_pins_private(config), cleanup, WaveshareEPaperLogTag, "Failed to configure GPIO pins");
 
     // Turn on the power on the ePaper display - Some models are equipped with a power control pin to physically turn power on or off
     ESP_GOTO_ON_ERROR(set_epaper_power_private(config->hw_config.pwr_io_num, true), cleanup, WaveshareEPaperLogTag, "Failed to turn on ePaper power");
@@ -62,6 +62,14 @@ esp_err_t waveshare_epaper_driver_init(const waveshare_epaper_config_t* config, 
     //     pLedMax7219->commands.commands_buffer = heap_caps_calloc(config->hw_config.chain_length, sizeof(max7219_command_t), MALLOC_CAP_DMA);
     //     ESP_GOTO_ON_FALSE(pLedMax7219->commands.commands_buffer != NULL, ESP_ERR_NO_MEM, cleanup, WaveshareEPaperLogTag, "Could not allocate memory for command buffer");
     // }
+
+
+    // Take the device off RESET - We held it with /RESET = L - We can transition it to HIGH to take the device out of reset
+    // Read Busy_H to wait until the device is ready
+    /*esp_err_t err =*/ gpio_set_level(config->hw_config.rst_io_num, 1);
+    while (!gpio_get_level(config->hw_config.busy_io_num)) { // Data sheet asks to loop when Busy = LOW and proceed when Busy = HIGH
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
 
     // Add an SPI device on the given bus - We accept the SPI bus configuration as is
     ESP_GOTO_ON_ERROR(waveshare_epaper_spi_init_private(config, pDisplay), cleanup, WaveshareEPaperLogTag, "Failed to configure SPI Master");
@@ -102,8 +110,8 @@ esp_err_t waveshare_epaper_driver_free(waveshare_epaper_handle_t handle) {
         ESP_LOGW(WaveshareEPaperLogTag, "Failed to spi_bus_remove_device() -> (%d)", err);
     }
 
-    // SHutdown GPIO pins
-    err = disable_gpio_pins_private(&handle->hw_config);
+    // SHutdown GPIO pins - TODO: re-enable this
+    // err = disable_gpio_pins_private(&handle->hw_config);
     // TODO: Handle error right - This is vibe coded++
     if (err != ESP_OK) {
          firstError = firstError == ESP_OK ? err : firstError;
@@ -142,16 +150,15 @@ esp_err_t reset_epaper_hardware(waveshare_epaper_handle_t handle) {
         return ESP_ERR_INVALID_STATE;
     }
 
-    ESP_RETURN_ON_ERROR(gpio_set_level(handle->hw_config.rst_io_num, 1), WaveshareEPaperLogTag, "Failed to set RESET pin high");
-
+    // ESP_RETURN_ON_ERROR(gpio_set_level(handle->hw_config.rst_io_num, 1), WaveshareEPaperLogTag, "Failed to set RESET pin high");
 
 
     esp_err_t err = gpio_set_level(handle->hw_config.rst_io_num, 1);
-    vTaskDelay(pdMS_TO_TICKS(200 / portTICK_PERIOD_MS)); // TODO: 200 ms - Verify timings
+    vTaskDelay(pdMS_TO_TICKS(200)); // TODO: 200 ms - Verify timings
     gpio_set_level(handle->hw_config.rst_io_num, 0);
-    vTaskDelay(pdMS_TO_TICKS(2 / portTICK_PERIOD_MS));  // TODO 2ms - Verify timings
+    vTaskDelay(pdMS_TO_TICKS(2));  // TODO 2ms - Verify timings
     gpio_set_level(handle->hw_config.rst_io_num, 1);
-    vTaskDelay(pdMS_TO_TICKS(200 / portTICK_PERIOD_MS)); // TODO: 200 ms - Verify timings
+    vTaskDelay(pdMS_TO_TICKS(200)); // TODO: 200 ms - Verify timings
 
     return err;
 }
@@ -178,7 +185,14 @@ esp_err_t waveshare_epaper_display_on_off(waveshare_epaper_handle_t handle, bool
         return ESP_ERR_INVALID_STATE;
     }
 
-    return waveshare_epaper_power_on_off_private(handle, on, enableEpd);
+    esp_err_t err = waveshare_epaper_power_on_off_private(handle, on, enableEpd);
+
+    // Wait for HIgh
+    while (!gpio_get_level(handle->hw_config.busy_io_num)) { // Data sheet asks to loop when Busy = LOW and proceed when Busy = HIGH
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
+
+    return err;
 }
 
 
@@ -190,15 +204,25 @@ esp_err_t waveshare_epaper_display_power_off_and_sleep(waveshare_epaper_handle_t
         return ESP_ERR_INVALID_STATE;
     }
 
+    while (!gpio_get_level(handle->hw_config.busy_io_num)) { // Data sheet asks to loop when Busy = LOW and proceed when Busy = HIGH
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
+
     ESP_RETURN_ON_ERROR(waveshare_epaper_power_on_off_private(handle, false, false), WaveshareEPaperLogTag, "Failed to power off ePaper display");
+    // Wait for HIgh
+    while (!gpio_get_level(handle->hw_config.busy_io_num)) { // Data sheet asks to loop when Busy = LOW and proceed when Busy = HIGH
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
+
     ESP_RETURN_ON_ERROR(waveshare_epaper_sleep_private(handle), WaveshareEPaperLogTag, "Failed to put ePaper display to sleep");
+    vTaskDelay(pdMS_TO_TICKS(200));
 
     return ESP_OK;
 }
 
 
 static esp_err_t waveshare_epaper_sleep_private(waveshare_epaper_handle_t handle) {
-    return waveshare_epaper_spi_send(handle, WAVESHARE_EPD_CMD_DEEP_SLEEP , (const uint8_t[]){0xA5}, 1);
+    return waveshare_epaper_spi_send(handle, WAVESHARE_EPD_CMD_DEEP_SLEEP , (const uint8_t[]){ 0xA5 }, 1, true);
 }
 
 
@@ -206,7 +230,7 @@ static esp_err_t waveshare_epaper_power_on_off_private(waveshare_epaper_handle_t
     waveshare_epaper_command_t command = on ? WAVESHARE_EPD_CMD_POWER_ON : WAVESHARE_EPD_CMD_POWER_OFF;
     uint8_t data[1];
     data[0] = on ? 0x06 : (enableEpd ? 0x01 : 0x00);
-    return waveshare_epaper_spi_send(handle, command, data, sizeof(data) / sizeof(data[0]));
+    return waveshare_epaper_spi_send(handle, command, data, sizeof(data) / sizeof(data[0]), true);
 }
 
 
@@ -254,7 +278,7 @@ static DMA_ATTR init_sequence_item_t init_sequence[] = {
     },
     {
         .command = 0x60,
-        .data = { 0x02,0x02 },
+        .data = { 0x02, 0x02 },
         .data_length = 2
     },
     {
@@ -295,11 +319,24 @@ static DMA_ATTR init_sequence_item_t init_sequence[] = {
 };
 
 esp_err_t waveshare_epaper_configure_display(waveshare_epaper_handle_t handle) {
+    if (handle->spi_device_handle == NULL) {
+#if CONFIG_WAVESHARE_EPAPER_ENABLE_DEBUG_LOG
+        ESP_LOGE(WaveshareEPaperLogTag, "handle must not be NULL");
+#endif
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    // // Take the device off RESET
+    // esp_err_t err = gpio_set_level(handle->hw_config.rst_io_num, 1);
+    // vTaskDelay(pdMS_TO_TICKS(200)); // TODO: 200 ms - Verify timings
+
+    
     esp_err_t err = spi_device_acquire_bus(handle->spi_device_handle, portMAX_DELAY);
 
         for (uint16_t index = 0; index < sizeof(init_sequence) / sizeof(init_sequence_item_t); index++) {
             const init_sequence_item_t* item = &init_sequence[index];
-            err = waveshare_epaper_spi_send_exclusive(handle, item->command, item->data, item->data_length);
+            bool isLast = (index == (sizeof(init_sequence) / sizeof(init_sequence_item_t)) - 1);
+            err = waveshare_epaper_spi_send_exclusive(handle, item->command, item->data, item->data_length, isLast);
             if (err != ESP_OK){
                 break;
             }
@@ -311,59 +348,138 @@ esp_err_t waveshare_epaper_configure_display(waveshare_epaper_handle_t handle) {
 }
 
 
-esp_err_t test_spi_performance(waveshare_epaper_handle_t handle) {
-    // TODO: REMOVE. this is temporary to test the fastest way to send data over SPI with the logic analyser
-    return waveshare_epaper_spi_send(handle, 0x4D, (uint8_t[]){0x78}, 1);
-}
-
-
-
-
-static inline esp_err_t enable_gpio_pins_private(const waveshare_epaper_hw_config_t* hw_config) {
-    return configure_gpio_pins_private(hw_config, true);
-}
-
-static inline esp_err_t disable_gpio_pins_private(const waveshare_epaper_hw_config_t* hw_config) {
-    return configure_gpio_pins_private(hw_config, false);
-}
-
-static esp_err_t configure_gpio_pins_private(const waveshare_epaper_hw_config_t* hw_config, bool enable) {
-    esp_err_t ret = ESP_OK;
-
-    // Configure POWER pin as output - The pin level is initially set to LOW
-    if (hw_config->pwr_io_num != GPIO_NUM_NC) {
-        ESP_GOTO_ON_ERROR(gpio_set_direction(hw_config->pwr_io_num, enable ? GPIO_MODE_OUTPUT : GPIO_MODE_DISABLE), cleanup, WaveshareEPaperLogTag, "Failed to set direction for POWER pin");
-        ESP_GOTO_ON_ERROR(gpio_set_level(hw_config->pwr_io_num, 0), cleanup, WaveshareEPaperLogTag, "Failed to set level (0) for POWER pin");
+esp_err_t waveshare_epaper_display_buffer(waveshare_epaper_handle_t handle, const uint8_t* buffer, size_t buffer_length) {
+    if (handle->spi_device_handle == NULL) {
+#if CONFIG_WAVESHARE_EPAPER_ENABLE_DEBUG_LOG
+        ESP_LOGE(WaveshareEPaperLogTag, "handle must not be NULL");
+#endif
+        return ESP_ERR_INVALID_STATE;
     }
 
-    // Conf:gure BUSY pin as input
-    // TODO: Enable interupts
-    ESP_GOTO_ON_ERROR(gpio_set_direction(hw_config->busy_io_num, enable ? GPIO_MODE_INPUT : GPIO_MODE_DISABLE), cleanup, WaveshareEPaperLogTag, "Failed to set direction for BUSY pin");
+    esp_err_t err = waveshare_epaper_spi_send(handle, WAVESHARE_EPD_CMD_DATA_START_TRANSMISSION, buffer, buffer_length, true);
+
+    // TODO: EPD_2IN15G_ReadBusyH()
+    return err;
+}
+
+esp_err_t waveshare_epaper_display_refresh(waveshare_epaper_handle_t handle) {
+    if (handle->spi_device_handle == NULL) {
+#if CONFIG_WAVESHARE_EPAPER_ENABLE_DEBUG_LOG
+        ESP_LOGE(WaveshareEPaperLogTag, "handle must not be NULL");
+#endif
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    // Wait for display to be ready
+    while (!gpio_get_level(handle->hw_config.busy_io_num)) { // Data sheet asks to loop when Busy = LOW and proceed when Busy = HIGH
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
+
+    // Refresh display - We choose VCOM follows LUTC (0x00)
+    esp_err_t err = waveshare_epaper_spi_send(handle, WAVESHARE_EPD_CMD_DISPLAY_REFRESH, (uint8_t[]){ 0x00 }, 1, true);
+
+    // while (!gpio_get_level(handle->hw_config.busy_io_num)) { // Data sheet asks to loop when Busy = LOW and proceed when Busy = HIGH
+    //     vTaskDelay(pdMS_TO_TICKS(1));
+    // }
+
+    return err;
+}
+
+
+
+esp_err_t test_spi_performance(waveshare_epaper_handle_t handle) {
+    // TODO: REMOVE. this is temporary to test the fastest way to send data over SPI with the logic analyser
+    return waveshare_epaper_spi_send(handle, 0x4D, (uint8_t[]){0x78}, 1, true);
+}
+
+
+
+
+static inline esp_err_t enable_gpio_pins_private(const waveshare_epaper_config_t* config) {
+    return configure_gpio_pins_private(config, true);
+}
+
+static inline esp_err_t disable_gpio_pins_private(const waveshare_epaper_config_t* config) {
+    return configure_gpio_pins_private(config, false);
+}
+
+static esp_err_t configure_gpio_pins_private(const waveshare_epaper_config_t* config, bool enable) {
+    esp_err_t ret = ESP_OK;
+
+    // Configure CS pin - The pin level is initially set to HIGH to deselect the device
+    gpio_config_t cs_io_conf = {
+        .pin_bit_mask = BIT64(config->spi_cfg.spics_io_num),
+        .mode = enable ? GPIO_MODE_OUTPUT : GPIO_MODE_DISABLE,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE
+    };
+    ESP_GOTO_ON_ERROR(gpio_config(&cs_io_conf), cleanup, WaveshareEPaperLogTag, "Failed to configure GPIO for CS pin");
+    ESP_GOTO_ON_ERROR(gpio_set_level(config->spi_cfg.spics_io_num, 1), cleanup, WaveshareEPaperLogTag, "Failed to set level (1) for CS pin");
+
+    // Configure POWER pin as output - The pin level is initially set to LOW
+    if (config->hw_config.pwr_io_num != GPIO_NUM_NC) {
+        gpio_config_t pwr_io_conf = {
+            .pin_bit_mask = BIT64(config->hw_config.pwr_io_num),
+            .mode = enable ? GPIO_MODE_OUTPUT : GPIO_MODE_DISABLE,
+            .pull_up_en = GPIO_PULLUP_DISABLE,
+            .pull_down_en = GPIO_PULLDOWN_DISABLE,
+            .intr_type = GPIO_INTR_DISABLE
+        };
+        ESP_GOTO_ON_ERROR(gpio_config(&pwr_io_conf), cleanup, WaveshareEPaperLogTag, "Failed to configure GPIO for POWER pin");
+        ESP_GOTO_ON_ERROR(gpio_set_level(config->hw_config.pwr_io_num, 0), cleanup, WaveshareEPaperLogTag, "Failed to set level (0) for POWER pin");
+    }
+
+    // Configure BUSY pin as input
+    gpio_config_t busy_io_conf = {
+        .pin_bit_mask = BIT64(config->hw_config.busy_io_num),
+        .mode = enable ? GPIO_MODE_INPUT : GPIO_MODE_DISABLE,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE  // TODO: Enable interupts
+    };
+    ESP_GOTO_ON_ERROR(gpio_config(&busy_io_conf), cleanup, WaveshareEPaperLogTag, "Failed to configure GPIO for BUSY pin");
     
-    // Configure RESET pin - The pin level is initially set to HIGH
-    ESP_GOTO_ON_ERROR(gpio_set_direction(hw_config->rst_io_num, enable ? GPIO_MODE_OUTPUT : GPIO_MODE_DISABLE), cleanup, WaveshareEPaperLogTag, "Failed to set direction for RESET pin");
-    ESP_GOTO_ON_ERROR(gpio_set_level(hw_config->rst_io_num, 1), cleanup, WaveshareEPaperLogTag, "Failed to set level (1) for RESET pin");
+    // Configure RESET pin - The pin level is initially set to LOW to hold the device in RESET
+    gpio_config_t rst_io_conf = {
+        .pin_bit_mask = BIT64(config->hw_config.rst_io_num),
+        .mode = enable ? GPIO_MODE_OUTPUT : GPIO_MODE_DISABLE,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE
+    };
+    ESP_GOTO_ON_ERROR(gpio_config(&rst_io_conf), cleanup, WaveshareEPaperLogTag, "Failed to configure GPIO for RESET pin");
+    ESP_GOTO_ON_ERROR(gpio_set_level(config->hw_config.rst_io_num, 0), cleanup, WaveshareEPaperLogTag, "Failed to set level (1) for RESET pin");
     
     // Configure Data/Command pin - The pin level is initially set to LOW
-    if (hw_config->data_cmd_io_num != GPIO_NUM_NC) {
-        ESP_GOTO_ON_ERROR(gpio_set_direction(hw_config->data_cmd_io_num, enable ? GPIO_MODE_OUTPUT : GPIO_MODE_DISABLE), cleanup, WaveshareEPaperLogTag, "Failed to set direction for Data/Command pin");
-        ESP_GOTO_ON_ERROR(gpio_set_level(hw_config->data_cmd_io_num, 0), cleanup, WaveshareEPaperLogTag, "Failed to set level (0) for Data/Command pin");
+    if (config->hw_config.data_cmd_io_num != GPIO_NUM_NC) {
+        gpio_config_t data_cmd_io_conf = {
+            .pin_bit_mask = BIT64(config->hw_config.data_cmd_io_num),
+            .mode = enable ? GPIO_MODE_OUTPUT : GPIO_MODE_DISABLE,
+            .pull_up_en = GPIO_PULLUP_DISABLE,
+            .pull_down_en = GPIO_PULLDOWN_DISABLE,
+            .intr_type = GPIO_INTR_DISABLE
+        };
+        ESP_GOTO_ON_ERROR(gpio_config(&data_cmd_io_conf), cleanup, WaveshareEPaperLogTag, "Failed to configure GPIO for Data/Command pin");
+        ESP_GOTO_ON_ERROR(gpio_set_level(config->hw_config.data_cmd_io_num, 0), cleanup, WaveshareEPaperLogTag, "Failed to set level (0) for Data/Command pin");
     }
 
     return ret;
 
 cleanup:
 // TODO: COllect and Log Errors during cleanup
-    if (hw_config->pwr_io_num != GPIO_NUM_NC) {
-        gpio_set_direction(hw_config->pwr_io_num, GPIO_MODE_DISABLE);
+
+    gpio_reset_pin(config->spi_cfg.spics_io_num);
+
+    if (config->hw_config.pwr_io_num != GPIO_NUM_NC) {
+        gpio_reset_pin(config->hw_config.pwr_io_num);
     }
 
-    gpio_set_direction(hw_config->busy_io_num, GPIO_MODE_DISABLE);
+    gpio_reset_pin(config->hw_config.busy_io_num);
+    gpio_reset_pin(config->hw_config.rst_io_num);
 
-    gpio_set_direction(hw_config->rst_io_num, GPIO_MODE_DISABLE);
-
-    if (hw_config->pwr_io_num != GPIO_NUM_NC) {
-        gpio_set_direction(hw_config->pwr_io_num, GPIO_MODE_DISABLE);
+    if (config->hw_config.data_cmd_io_num != GPIO_NUM_NC) {
+        gpio_reset_pin(config->hw_config.data_cmd_io_num);
     }
 
     return ret;
@@ -374,7 +490,11 @@ cleanup:
 
 
 static esp_err_t set_epaper_power_private(gpio_num_t power_pin, bool enable) {
-    return power_pin != GPIO_NUM_NC ? gpio_set_level(power_pin, enable ? 1 : 0) : ESP_OK;
+    esp_err_t err =  power_pin != GPIO_NUM_NC ? gpio_set_level(power_pin, enable ? 1 : 0) : ESP_OK;
+    if (err == ESP_OK) {
+        vTaskDelay(pdMS_TO_TICKS(200));
+    }
+    return err;
 }
 
 

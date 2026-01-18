@@ -107,6 +107,14 @@ esp_err_t waveshare_epaper_display_power_off_and_sleep(waveshare_epaper_handle_t
 
 esp_err_t waveshare_epaper_configure_display(waveshare_epaper_handle_t handle);
 
+esp_err_t waveshare_epaper_display_buffer(waveshare_epaper_handle_t handle, const uint8_t* buffer, size_t buffer_length);
+
+
+
+
+esp_err_t waveshare_epaper_display_refresh(waveshare_epaper_handle_t handle);
+
+
 esp_err_t test_spi_performance(waveshare_epaper_handle_t handle);
 
 

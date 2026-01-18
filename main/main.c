@@ -40,6 +40,8 @@ const gpio_num_t PWR_PIN = GPIO_NUM_5;
 const gpio_num_t BUSY_PIN = GPIO_NUM_9;
 const gpio_num_t RST_PIN = GPIO_NUM_13;
 const gpio_num_t DATA_CMD_PIN = GPIO_NUM_14;
+
+const gpio_num_t LA_TRIGGER_PIN = GPIO_NUM_6; // Logic Analyzer trigger pin
 #else
 #if CONFIG_IDF_TARGET_ESP32C3
 const gpio_num_t CS_PIN = GPIO_NUM_1;
@@ -55,11 +57,61 @@ const gpio_num_t DATA_CMD_PIN = ;
 #endif
 
 
+    // Display resolution
+#define EPD_2IN15G_WIDTH       160
+#define EPD_2IN15G_HEIGHT      296
+
+
+
 // Handle to the Waveshare ePaper display driver
 waveshare_epaper_handle_t waveshare_epaper_handle = NULL;
 
 
+
+esp_err_t blank_display(waveshare_epaper_handle_t waveshare_epaper_handle, uint16_t width, uint16_t height, uint8_t* image, size_t image_size) {
+    // Clear
+    for (uint16_t pixel_height = 0; pixel_height < EPD_2IN15G_HEIGHT; pixel_height++) {
+        for (uint16_t pixel_width = 0; pixel_width < EPD_2IN15G_WIDTH; pixel_width++) {
+            image[pixel_width + pixel_height * width] = (0x01 << 6) | (0x01 << 4) | (0x01 << 2) | 0x01;
+        }
+    }
+
+    ESP_ERROR_CHECK(waveshare_epaper_display_buffer(waveshare_epaper_handle, image, image_size));
+    ESP_ERROR_CHECK(waveshare_epaper_display_on_off(waveshare_epaper_handle, true, false));
+    ESP_ERROR_CHECK(waveshare_epaper_display_refresh(waveshare_epaper_handle));
+
+    ESP_ERROR_CHECK(waveshare_epaper_display_power_off_and_sleep(waveshare_epaper_handle));
+
+    return ESP_OK;
+}
+
+
+
 void app_main(void) {
+
+    // Logic Analyzer trigger
+    // Configure CS pin - The pin level is initially set to HIGH to deselect the device
+    gpio_config_t cs_io_conf = {
+        .pin_bit_mask = BIT64(LA_TRIGGER_PIN),
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE
+    };
+    ESP_ERROR_CHECK(gpio_config(&cs_io_conf));
+    ESP_ERROR_CHECK(gpio_set_level(LA_TRIGGER_PIN, 0));
+    vTaskDelay(pdMS_TO_TICKS(1));
+    ESP_ERROR_CHECK(gpio_set_level(LA_TRIGGER_PIN, 1));
+
+
+
+    // Allocate a buffer (DMA capable)
+    uint16_t width = (EPD_2IN15G_WIDTH % 4 == 0)? (EPD_2IN15G_WIDTH / 4 ): (EPD_2IN15G_WIDTH / 4 + 1);
+    uint16_t height = EPD_2IN15G_HEIGHT;
+    size_t image_size = width * height;
+    uint8_t* image = heap_caps_calloc(1, image_size, MALLOC_CAP_DMA);
+
+
     // Configure SPI bus to communicate with Waveshare ePaper displays
     spi_bus_config_t spiBusConfig = {
         .mosi_io_num = DIN_PIN,
@@ -69,7 +121,7 @@ void app_main(void) {
         .data2_io_num = GPIO_NUM_NC,
         .data3_io_num = GPIO_NUM_NC,
 
-        .max_transfer_sz = SOC_SPI_MAXIMUM_BUFFER_SIZE,
+        .max_transfer_sz = image_size,
         .flags = SPICOMMON_BUSFLAG_MASTER,
         .isr_cpu_id = ESP_INTR_CPU_AFFINITY_AUTO
     };
@@ -84,7 +136,7 @@ void app_main(void) {
             .clock_speed_hz = 10 * 1000000,
 
             .spics_io_num = CS_PIN,
-            .queue_size = 8
+            .queue_size = 1
         },
         .hw_config = {
             .pwr_io_num = PWR_PIN,
@@ -97,17 +149,62 @@ void app_main(void) {
     ESP_LOGI(TAG, "Initialize Waveshare ePaper display driver");
     ESP_ERROR_CHECK(waveshare_epaper_driver_init(&ePaperInitConfig, &waveshare_epaper_handle));
 
-    ESP_ERROR_CHECK(reset_epaper_hardware(waveshare_epaper_handle));
+    // ESP_ERROR_CHECK(reset_epaper_hardware(waveshare_epaper_handle));
 
-    ESP_ERROR_CHECK(test_spi_performance(waveshare_epaper_handle));
-    //ESP_ERROR_CHECK(waveshare_epaper_configure_display(waveshare_epaper_handle));
+    //ESP_ERROR_CHECK(test_spi_performance(waveshare_epaper_handle));
+    ESP_ERROR_CHECK(waveshare_epaper_configure_display(waveshare_epaper_handle));
 
+
+    // ------------------------------------------------------------------------------------------------------
+    // Currently uses two bits per pixel (2.15in Hat G)
+    //
+    // * 00 -> Black
+    // * 01 -> White
+    // * 10 -> Yellow
+    // * 11 -> Red
+    // ------------------------------------------------------------------------------------------------------
+    #if DRAW_TEST_PATTERN
+    for (uint16_t pixel_height = 0; pixel_height < EPD_2IN15G_HEIGHT; pixel_height++) {
+        for (uint16_t pixel_width = 0; pixel_width < EPD_2IN15G_WIDTH; pixel_width++) {
+
+            size_t byte_index = (pixel_width / 4) + (pixel_height * width);
+            uint8_t pixel_value = 0;
+
+            // Alternate colors for testing
+            if ((pixel_width + pixel_height) % 4 == 0) {
+                pixel_value = 0x00; // Black
+            } else if ((pixel_width + pixel_height) % 4 == 1) {
+                pixel_value = 0x01; // White
+            } else if ((pixel_width + pixel_height) % 4 == 2) {
+                pixel_value = 0x02; // Yellow
+            } else {
+                pixel_value = 0x03; // Red
+            }
+
+            // Each byte contains 4 pixels (2 bits per pixel)
+            uint8_t shift = (3 - (pixel_width % 4)) * 2;
+            image[byte_index] &= ~(0x03 << shift); // Clear the bits
+            image[byte_index] |= (pixel_value << shift); // Set the new value
+        }
+    }
+
+    ESP_ERROR_CHECK(waveshare_epaper_display_buffer(waveshare_epaper_handle, image, image_size));
+    ESP_ERROR_CHECK(waveshare_epaper_display_on_off(waveshare_epaper_handle, true, false));
+    ESP_ERROR_CHECK(waveshare_epaper_display_refresh(waveshare_epaper_handle));
+
+    ESP_ERROR_CHECK(waveshare_epaper_display_power_off_and_sleep(waveshare_epaper_handle));
+#else
+    ESP_ERROR_CHECK(blank_display(waveshare_epaper_handle, width, height, image, image_size));
+#endif
+
+
+    do {
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    } while (true);
+
+
+    // TODO: Bring device in reset hardware
     ESP_ERROR_CHECK(set_epaper_power(waveshare_epaper_handle, false));
-
-    // do {
-    //     vTaskDelay(1000 / portTICK_PERIOD_MS);
-    // } while (true);
-
 
     // Shutdown Waveshare ePaper display driver and SPI bus
     ESP_ERROR_CHECK(waveshare_epaper_driver_free(waveshare_epaper_handle));
