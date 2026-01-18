@@ -3,31 +3,47 @@
 // -----------------------------------------------------------------------------------
 
 #include <esp_check.h>
+#include <esp_log.h>
 
 #include "waveshare-epaper.h"
 #include "waveshare-epaper-context.h"
 #include "waveshare-epaper-spi.h"
 
 
-#define COMMAND_LEVEL 0
-#define DATA_LEVEL    1
+
+static const char* TAG = "wepd_spi";
+
+
+
+typedef enum command_data_level {
+    COMMAND_LEVEL = 0,
+    DATA_LEVEL = 1
+} command_data_level_t;
+
+typedef struct waveshare_epaper_spi_isr_context {
+    waveshare_epaper_handle_t handle;
+    command_data_level_t level;
+} waveshare_epaper_spi_isr_context_t;
+
+
+static esp_err_t waveshare_epaper_spi_send_private(waveshare_epaper_handle_t handle, uint8_t command, const void* data, uint32_t data_len, bool acquire_bus);
+
 
 
 static void pre_spi_transaction_isr_callback(spi_transaction_t* t) {
-    // ESP_EARLY_LOGV(TAG, "cs high %d.", ((eeprom_context_t*)t->user)->cfg.cs_io);
-    // gpio_set_level(((eeprom_context_t*)t->user)->cfg.cs_io, 1);
-
-    uint32_t userContext = (uint32_t)t->user;
-    uint32_t dcLevel = userContext == 1 ? COMMAND_LEVEL : DATA_LEVEL;
-    // TODO: DO not hardcode the pin
-    //ESP_EARLY_LOGV("ISR SPI", "d/c -> %d.", dcLevel);
-    gpio_set_level(GPIO_NUM_14, dcLevel);
+    waveshare_epaper_spi_isr_context_t* userContext = (waveshare_epaper_spi_isr_context_t*)t->user;
+    esp_err_t err = gpio_set_level(userContext->handle->hw_config.data_cmd_io_num, userContext->level);
+    if (err != ESP_OK) {
+        ESP_EARLY_LOGE(TAG, "Failed to set DC line pre-SPI transaction");
+    }
 }
 
 static void post_spi_transaction_isr_callback(spi_transaction_t* t) {
-    // TODO: DO not hardcode the pin
-    //ESP_EARLY_LOGV("ISR SPI", "d/c -> COMMAND_LEVEL");
-    gpio_set_level(GPIO_NUM_14, COMMAND_LEVEL);
+    waveshare_epaper_spi_isr_context_t* userContext = (waveshare_epaper_spi_isr_context_t*)t->user;
+    esp_err_t err = gpio_set_level(userContext->handle->hw_config.data_cmd_io_num, COMMAND_LEVEL);
+    if (err != ESP_OK) {
+        ESP_EARLY_LOGE(TAG, "Failed to reset DC line post-SPI transaction");
+    }
 }
 
 
@@ -67,10 +83,26 @@ esp_err_t waveshare_epaper_spi_init_private(const waveshare_epaper_config_t* con
 
 
 esp_err_t waveshare_epaper_spi_send(waveshare_epaper_handle_t handle, uint8_t command, const void* data, uint32_t data_len) {
+    return waveshare_epaper_spi_send_private(handle, command, data, data_len, true);
+}
+
+esp_err_t waveshare_epaper_spi_send_exclusive(waveshare_epaper_handle_t handle, uint8_t command, const void* data, uint32_t data_len) {
+    return waveshare_epaper_spi_send_private(handle, command, data, data_len, false);
+}
+
+
+static esp_err_t waveshare_epaper_spi_send_private(waveshare_epaper_handle_t handle, uint8_t command, const void* data, uint32_t data_len, bool acquire_bus) {
     
     esp_err_t err = ESP_OK;
-    err = spi_device_acquire_bus(handle->spi_device_handle, portMAX_DELAY);
-
+    if (acquire_bus) {
+        err = spi_device_acquire_bus(handle->spi_device_handle, portMAX_DELAY);
+    }
+    
+        waveshare_epaper_spi_isr_context_t isrContextCommand = {
+            .handle = handle,
+            .level = COMMAND_LEVEL
+        };
+        
         // Transaction for the command
         spi_transaction_t commandTransaction = {
             .flags = SPI_TRANS_USE_TXDATA,
@@ -79,13 +111,14 @@ esp_err_t waveshare_epaper_spi_send(waveshare_epaper_handle_t handle, uint8_t co
             .length = sizeof(command) * 8,
             .rxlength = 0,
             .override_freq_hz = 0,
-            .user = (void*)1,
+            .user = (void*)&isrContextCommand,
             //.tx_buffer = NULL,
             .tx_data[0] = command,
             .rx_buffer = NULL
         };
 
         err = spi_device_polling_transmit(handle->spi_device_handle, &commandTransaction);
+
 
         // Transaction for the data
         if ((data != NULL) && (data_len > 0)) {
@@ -97,10 +130,12 @@ esp_err_t waveshare_epaper_spi_send(waveshare_epaper_handle_t handle, uint8_t co
                 .length = data_len * 8, // length in bits
                 .rxlength = 0,
                 .override_freq_hz = 0,
-                .user = (void*)10,
-                .tx_buffer = data,
-                .rx_buffer = NULL
+                .user = (void*)&isrContextCommand,
+                
+                //.tx_buffer = data,
+                //.rx_buffer = NULL
             };
+            isrContextCommand.level = DATA_LEVEL;
 
             if (useTxData) {
                 memcpy(dataTransaction.tx_data, data, data_len);
@@ -111,7 +146,9 @@ esp_err_t waveshare_epaper_spi_send(waveshare_epaper_handle_t handle, uint8_t co
             err = spi_device_polling_transmit(handle->spi_device_handle, &dataTransaction);
         }
 
-    spi_device_release_bus(handle->spi_device_handle);
+    if (acquire_bus) {
+        spi_device_release_bus(handle->spi_device_handle);
+    }
 
     // TODO: Wait for BUSY to because "available"
     

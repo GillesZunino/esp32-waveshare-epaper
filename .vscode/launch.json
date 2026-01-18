@@ -14,7 +14,7 @@
 
       "initCommands": [
         "set mem inaccessible-by-default off",
-        "set remote hardware-watchpoint-limit IDF_TARGET_CPU_WATCHPOINT_NUM",
+        "set remote hardware-watchpoint-limit {IDF_TARGET_CPU_WATCHPOINT_NUM}",
         "monitor reset halt",
         "maintenance flush register-cache"
       ],

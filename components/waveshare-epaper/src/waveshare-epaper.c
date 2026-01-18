@@ -216,7 +216,7 @@ static esp_err_t waveshare_epaper_power_on_off_private(waveshare_epaper_handle_t
 
 typedef struct init_sequence_item {
     uint8_t command;
-    uint8_t data[16];
+    uint8_t data[8];
     uint8_t data_length;
 } init_sequence_item_t;
 
@@ -295,12 +295,19 @@ static DMA_ATTR init_sequence_item_t init_sequence[] = {
 };
 
 esp_err_t waveshare_epaper_configure_display(waveshare_epaper_handle_t handle) {
-    for (uint16_t index = 0; index < sizeof(init_sequence) / sizeof(init_sequence_item_t); index++) {
-        const init_sequence_item_t* item = &init_sequence[index];
-        ESP_RETURN_ON_ERROR(waveshare_epaper_spi_send(handle, item->command, item->data, item->data_length), WaveshareEPaperLogTag, "Failed to send init sequence command (%d) 0x%02X", index, item->command);
-    }
+    esp_err_t err = spi_device_acquire_bus(handle->spi_device_handle, portMAX_DELAY);
 
-    return ESP_OK;
+        for (uint16_t index = 0; index < sizeof(init_sequence) / sizeof(init_sequence_item_t); index++) {
+            const init_sequence_item_t* item = &init_sequence[index];
+            err = waveshare_epaper_spi_send_exclusive(handle, item->command, item->data, item->data_length);
+            if (err != ESP_OK){
+                break;
+            }
+        }
+
+    spi_device_release_bus(handle->spi_device_handle);
+
+    return err;
 }
 
 
