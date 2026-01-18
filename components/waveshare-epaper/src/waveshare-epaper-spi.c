@@ -93,6 +93,10 @@ esp_err_t waveshare_epaper_spi_send_exclusive(waveshare_epaper_handle_t handle, 
 
 static esp_err_t waveshare_epaper_spi_send_private(waveshare_epaper_handle_t handle, uint8_t command, const void* data, uint32_t data_len, bool acquire_bus) {
     
+    // TODO; Compare speed of the following and choose the shortest overall transaction for one byte cmd and one byte data
+    // * Manipulate D/C in interupt routines (before and after)
+    // * Manipulate D/C before spi_device_polling_transmit (before and after)
+    //
     esp_err_t err = ESP_OK;
     if (acquire_bus) {
         err = spi_device_acquire_bus(handle->spi_device_handle, portMAX_DELAY);
@@ -155,3 +159,80 @@ static esp_err_t waveshare_epaper_spi_send_private(waveshare_epaper_handle_t han
     return err;
 }
 
+
+esp_err_t wait_for_non_busy(waveshare_epaper_context_t* pDisplay) {
+    return ESP_OK;
+}
+
+static esp_err_t wait_for_non_busy_naive(waveshare_epaper_context_t* pDisplay) {
+    // EXPECT: 1 to 10ms ?
+    while (gpio_get_level(pDisplay->hw_config.busy_io_num) == 0) {
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
+
+    return ESP_OK;
+}
+
+
+// -------------------- semnaphore based ------------------------
+static SemaphoreHandle_t gpio_semaphore = NULL;
+
+static void IRAM_ATTR gpio_isr_handler(void* arg) {
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    xSemaphoreGiveFromISR(gpio_semaphore, &xHigherPriorityTaskWoken);
+    if (xHigherPriorityTaskWoken) {
+        portYIELD_FROM_ISR();
+    }
+}
+
+void setup_gpio_interrupt(gpio_num_t busy_pin, gpio_isr_t isr_handler) {
+    gpio_semaphore = xSemaphoreCreateBinary();
+    
+    gpio_config_t io_conf = {
+        .pin_bit_mask = (1ULL << busy_pin),
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_ENABLE,
+        .intr_type = GPIO_INTR_POSEDGE  // Rising edge
+    };
+    gpio_config(&io_conf);
+    
+    gpio_install_isr_service(0);
+    gpio_isr_handler_add(busy_pin, isr_handler, NULL);
+}
+
+static esp_err_t wait_for_non_busy_interupt(waveshare_epaper_context_t* pDisplay) {
+    // EXPECT: 10 to 100 micro seconds ? (10 to 50 micro seconds overhead)
+    xSemaphoreTake(gpio_semaphore, portMAX_DELAY);
+    return ESP_OK;
+}
+
+// use with
+//  setup_gpio_interrupt(handle->hw_config.busy_io_num, gpio_isr_handler);
+//  wait_for_non_busy_interupt(handle);
+// -------------------------------------------------------------
+
+
+// -------------------- EventGroup based ------------------------
+static EventGroupHandle_t gpio_event_group;
+#define PIN_HIGH_BIT BIT0
+
+
+static void IRAM_ATTR gpio_isr_handler_eventgroup(void* arg) {
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    xEventGroupSetBitsFromISR(gpio_event_group, PIN_HIGH_BIT, &xHigherPriorityTaskWoken);
+    if (xHigherPriorityTaskWoken) {
+        portYIELD_FROM_ISR();
+    }
+}
+
+void wait_for_pin_high_event_group() {
+    xEventGroupWaitBits(gpio_event_group, PIN_HIGH_BIT, 
+                        pdTRUE, pdFALSE, portMAX_DELAY);
+}
+// Use with
+//  setup_gpio_interrupt(handle->hw_config.busy_io_num, gpio_isr_handler_eventgroup);
+//  wait_for_pin_high_event_group();
+// --------------------------------------------------------------
+
+// ULP ?
