@@ -9,6 +9,9 @@
 
 #include "waveshare-epaper.h"
 
+#include "sample_image2in15.h"
+
+
 
 const char* TAG = "wepd_main";
 
@@ -70,8 +73,8 @@ waveshare_epaper_handle_t waveshare_epaper_handle = NULL;
 
 esp_err_t blank_display(waveshare_epaper_handle_t waveshare_epaper_handle, uint16_t width, uint16_t height, uint8_t* image, size_t image_size) {
     // Clear
-    for (uint16_t pixel_height = 0; pixel_height < EPD_2IN15G_HEIGHT; pixel_height++) {
-        for (uint16_t pixel_width = 0; pixel_width < EPD_2IN15G_WIDTH; pixel_width++) {
+    for (uint16_t pixel_height = 0; pixel_height < height; pixel_height++) {
+        for (uint16_t pixel_width = 0; pixel_width < width; pixel_width++) {
             image[pixel_width + pixel_height * width] = (0x01 << 6) | (0x01 << 4) | (0x01 << 2) | 0x01;
         }
     }
@@ -84,6 +87,30 @@ esp_err_t blank_display(waveshare_epaper_handle_t waveshare_epaper_handle, uint1
 
     return ESP_OK;
 }
+
+
+esp_err_t draw_raw_image(waveshare_epaper_handle_t waveshare_epaper_handle, const uint8_t* raw_image, uint16_t width, uint16_t height, uint8_t* image, size_t image_size) {
+    // Copy the sample image to a DMA capable memory buffer
+    memcpy(image, raw_image, image_size);
+
+    ESP_ERROR_CHECK(waveshare_epaper_display_buffer(waveshare_epaper_handle, image, image_size));
+    ESP_ERROR_CHECK(waveshare_epaper_display_on_off(waveshare_epaper_handle, true, false));
+    ESP_ERROR_CHECK(waveshare_epaper_display_refresh(waveshare_epaper_handle));
+
+    ESP_ERROR_CHECK(waveshare_epaper_display_power_off_and_sleep(waveshare_epaper_handle));
+
+    return ESP_OK;
+}
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -121,6 +148,7 @@ void app_main(void) {
         .data2_io_num = GPIO_NUM_NC,
         .data3_io_num = GPIO_NUM_NC,
 
+        // SPI Max transfer size MUST be at least the size of one image buffer
         .max_transfer_sz = image_size,
         .flags = SPICOMMON_BUSFLAG_MASTER,
         .isr_cpu_id = ESP_INTR_CPU_AFFINITY_AUTO
@@ -222,9 +250,12 @@ void app_main(void) {
 
     ESP_ERROR_CHECK(waveshare_epaper_display_power_off_and_sleep(waveshare_epaper_handle));
 #else
-    ESP_ERROR_CHECK(blank_display(waveshare_epaper_handle, width, height, image, image_size));
+    ESP_ERROR_CHECK(draw_raw_image(waveshare_epaper_handle, gImage_2in15g, EPD_2IN15G_WIDTH, EPD_2IN15G_HEIGHT, image, image_size));
 #endif
 
+
+
+//    ESP_ERROR_CHECK(blank_display(waveshare_epaper_handle, width, height, image, image_size));
 
     do {
         vTaskDelay(pdMS_TO_TICKS(1000));

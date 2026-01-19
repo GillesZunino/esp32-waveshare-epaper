@@ -4,6 +4,7 @@
 
 set(srcs
         "main.c"
+        "sample_image2in15.c"
 )
 
 idf_component_register(
