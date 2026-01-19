@@ -135,8 +135,10 @@ void app_main(void) {
             .clock_source = SPI_CLK_SRC_DEFAULT,
             .clock_speed_hz = 10 * 1000000,
 
-            .spics_io_num = CS_PIN,
-            .queue_size = 1
+            .input_delay_ns = 0,
+            .sample_point = SPI_SAMPLING_POINT_PHASE_0,
+
+            .spics_io_num = CS_PIN
         },
         .hw_config = {
             .pwr_io_num = PWR_PIN,

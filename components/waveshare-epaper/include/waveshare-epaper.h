@@ -29,8 +29,8 @@ typedef struct waveshare_epaper_spi_config {
     spi_clock_source_t clock_source;    ///< Select SPI clock source, `SPI_CLK_SRC_DEFAULT` by default
     int clock_speed_hz;                 ///< SPI clock speed in Hz. Derived from `clock_source`
     int input_delay_ns;                 ///< Maximum data valid time of slave. The time required between SCLK and MISO
+    spi_sampling_point_t sample_point;  ///< SPI input data sampling point
     int spics_io_num;                   ///< CS GPIO pin for this device, or `GPIO_NUM_NC` (-1) if not used
-    int queue_size;                     ///< SPI transaction queue size. See 'spi_device_queue_trans()'
 } waveshare_epaper_spi_config_t;
 
 /**
@@ -40,7 +40,7 @@ typedef struct waveshare_epaper_hw_config {
     gpio_num_t pwr_io_num;       ///< Power control GPIO pin or `GPIO_NUM_NC` (-1) if not used
     gpio_num_t busy_io_num;      ///< Busy signal GPIO pin
     gpio_num_t rst_io_num;       ///< Reset GPIO pin
-    gpio_num_t data_cmd_io_num;  ///< Data/Command select GPIO pin or `GPIO_NUM_NC` (-1) if not used
+    gpio_num_t data_cmd_io_num;  ///< Data/Command GPIO pin (4-Wire SPI mode) or `GPIO_NUM_NC` (-1) to use 3-Wire SPI mode
 } waveshare_epaper_hw_config_t;
 
 /**

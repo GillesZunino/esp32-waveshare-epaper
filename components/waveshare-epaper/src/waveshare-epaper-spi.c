@@ -64,20 +64,16 @@ esp_err_t waveshare_epaper_spi_init_private(const waveshare_epaper_config_t* con
 
         .clock_source = config->spi_cfg.clock_source,
 
-        // duty_cycle_pos
-        // cs_ena_pretrans
-        // cs_ena_posttrans
-
         .clock_speed_hz = config->spi_cfg.clock_speed_hz,
         .input_delay_ns = config->spi_cfg.input_delay_ns,
-
-        // sample_point
+        .sample_point = config->spi_cfg.sample_point,
 
         .spics_io_num = config->spi_cfg.spics_io_num,
 
         .flags = 0,
-        .queue_size = config->spi_cfg.queue_size,
+        .queue_size = 1,
 
+        // ISR callbacks used to set Command/Data line in 4-Wire SPI mode
         .pre_cb = pre_spi_transaction_isr_callback,
         .post_cb = post_spi_transaction_isr_callback
     };
