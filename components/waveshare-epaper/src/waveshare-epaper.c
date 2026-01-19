@@ -253,71 +253,85 @@ typedef struct init_sequence_item {
 
 static DMA_ATTR init_sequence_item_t init_sequence[] = {
     {
+        // Dithering enable
         .command = 0x4D,
         .data = { 0x78 },
         .data_length = 1
     },
     {
+        // Panel Setting (PSR)
         .command = 0x00,
         .data = { 0x0F, 0x29 },
         .data_length = 2
     },
     {
+        // Power Settings (PWR)
         .command = 0x01,
         .data = { 0x07, 0x00 },
         .data_length = 2
     },
     {
+        // Power Off Sequence Settings (PFS)
         .command = 0x03,
         .data = { 0x10, 0x54, 0x44 },
         .data_length = 3
     },
     {
+        // Booster Soft Start (BTST)
         .command = 0x06,
         .data = { 0x05, 0x00, 0x3F, 0x0A, 0x25, 0x12, 0x1A },
         .data_length = 7
     },
     {
+        // VCOM and Data Interval Setting (VDI)
         .command = 0x50,
         .data = { 0x37 },
         .data_length = 1
     },
     {
+        // TCON Settings
         .command = 0x60,
         .data = { 0x02, 0x02 },
         .data_length = 2
     },
     {
+        // Resolution Settings (TRES)
         .command = 0x61,
         .data = { 0x00, 0xA0, 0x01, 0x28 },
         .data_length = 4
     },
     {
+        // TSBDRY - Temperature boundary phase C2
         .command = 0xE7,
         .data = { 0x1C },
         .data_length = 1
     },
     {
+        // Power Savings (PWS)
         .command = 0xE3,
         .data = { 0x22 },
         .data_length = 1
     },
     {
+        // ?
         .command = 0xB4,
         .data = { 0xD0 },
         .data_length = 1
     },
     {
+        // ?
         .command = 0xB5,
         .data = { 0x03 },
         .data_length = 1
     },
     {
+        // AUTO Sequence
         .command = 0xE9,
         .data = { 0x01 },
         .data_length = 1
     },
     {
+        // PLL Control (PLL)
         .command = 0x30,
         .data = { 0x08 },
         .data_length = 1
