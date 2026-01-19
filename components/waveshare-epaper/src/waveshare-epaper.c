@@ -461,7 +461,7 @@ static esp_err_t configure_gpio_pins_private(const waveshare_epaper_config_t* co
             .intr_type = GPIO_INTR_DISABLE
         };
         ESP_GOTO_ON_ERROR(gpio_config(&data_cmd_io_conf), cleanup, WaveshareEPaperLogTag, "Failed to configure GPIO for Data/Command pin");
-        ESP_GOTO_ON_ERROR(gpio_set_level(config->hw_config.data_cmd_io_num, 0), cleanup, WaveshareEPaperLogTag, "Failed to set level (0) for Data/Command pin");
+        ESP_GOTO_ON_ERROR(gpio_set_level(config->hw_config.data_cmd_io_num, COMMAND_LEVEL), cleanup, WaveshareEPaperLogTag, "Failed to set level (0) for Data/Command pin");
     }
 
     return ret;

@@ -4,6 +4,18 @@
 
 #pragma once
 
+
+/**
+ * @brief States for the Command/Data line when operating in 4-wire SPI mode.
+ */
+typedef enum command_data_level {
+    COMMAND_LEVEL = 0,
+    DATA_LEVEL = 1
+} command_data_level_t;
+
+
+
+
 esp_err_t waveshare_epaper_spi_init_private(const waveshare_epaper_config_t* config, waveshare_epaper_context_t* pDisplay);
 
 

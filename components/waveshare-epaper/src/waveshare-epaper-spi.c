@@ -15,10 +15,6 @@ static const char* TAG = "wepd_spi";
 
 
 
-typedef enum command_data_level {
-    COMMAND_LEVEL = 0,
-    DATA_LEVEL = 1
-} command_data_level_t;
 
 typedef struct waveshare_epaper_spi_isr_context {
     waveshare_epaper_handle_t handle;
