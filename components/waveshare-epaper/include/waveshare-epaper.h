@@ -118,6 +118,17 @@ esp_err_t waveshare_epaper_display_refresh(waveshare_epaper_handle_t handle);
 esp_err_t test_spi_performance(waveshare_epaper_handle_t handle);
 
 
+esp_err_t waveshare_epaper_read_data_stop(waveshare_epaper_handle_t handle, bool* data_stop);
+esp_err_t waveshare_epaper_read_temperature(waveshare_epaper_handle_t handle, bool internal, uint16_t* temperature);
+// TODO: Not sure about R43 - Investigate
+esp_err_t waveshare_epaper_read_low_power_state(waveshare_epaper_handle_t handle, bool* low_power_state);
+esp_err_t waveshare_epaper_read_revision(waveshare_epaper_handle_t handle, uint32_t* revision);
+esp_err_t waveshare_epaper_read_vcom(waveshare_epaper_handle_t handle, uint8_t* vcom);
+// TODO: R92
+esp_err_t waveshare_epaper_read_revision2(waveshare_epaper_handle_t handle, uint8_t* revision2);
+// TODO: R9F
+
+
 
 #ifdef __cplusplus
 }

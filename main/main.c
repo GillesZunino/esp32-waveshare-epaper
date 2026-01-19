@@ -158,6 +158,32 @@ void app_main(void) {
 
 
     // ------------------------------------------------------------------------------------------------------
+    // Read metadata from display
+    // ------------------------------------------------------------------------------------------------------
+    bool data_stop = false;
+    ESP_ERROR_CHECK(waveshare_epaper_read_data_stop(waveshare_epaper_handle, &data_stop));
+
+    uint16_t internal_temp = 0;
+    ESP_ERROR_CHECK(waveshare_epaper_read_temperature(waveshare_epaper_handle, true, &internal_temp));
+
+    uint16_t external_temp = 0;
+    ESP_ERROR_CHECK(waveshare_epaper_read_temperature(waveshare_epaper_handle, false, &external_temp));
+
+    bool low_power_state = false;
+    ESP_ERROR_CHECK(waveshare_epaper_read_low_power_state(waveshare_epaper_handle, &low_power_state));
+
+    uint32_t revision = 0;
+    ESP_ERROR_CHECK(waveshare_epaper_read_revision(waveshare_epaper_handle, &revision));
+
+    uint8_t vcom = 0;
+    ESP_ERROR_CHECK(waveshare_epaper_read_vcom(waveshare_epaper_handle, &vcom));
+
+    uint8_t revision2 = 0;
+    ESP_ERROR_CHECK(waveshare_epaper_read_revision2(waveshare_epaper_handle, &revision2));
+
+
+
+    // ------------------------------------------------------------------------------------------------------
     // Currently uses two bits per pixel (2.15in Hat G)
     //
     // * 00 -> Black

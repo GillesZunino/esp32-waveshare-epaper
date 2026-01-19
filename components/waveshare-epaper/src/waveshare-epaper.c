@@ -42,6 +42,12 @@ esp_err_t waveshare_epaper_driver_init(const waveshare_epaper_config_t* config, 
     // TODO: Check configuration
     //ESP_RETURN_ON_ERROR(check_driver_configuration_private(config), WaveshareEPaperLogTag, "Invalid configuration");
 
+    // TODO: Filter out invalid configurations when using ISRs
+    // if (config->spi_cfg.host_id == SPI1_HOST) {
+    //     ESP_LOGE(TAG, "interrupt cannot be used on SPI1 host.");
+    //     return ESP_ERR_INVALID_ARG;
+    // }
+
     // Allocate space for our handle
     waveshare_epaper_context_t* pDisplay = heap_caps_calloc(1, sizeof(waveshare_epaper_context_t), MALLOC_CAP_DEFAULT);
     if (pDisplay == NULL) {
@@ -391,6 +397,140 @@ esp_err_t test_spi_performance(waveshare_epaper_handle_t handle) {
     // TODO: REMOVE. this is temporary to test the fastest way to send data over SPI with the logic analyser
     return waveshare_epaper_spi_send(handle, 0x4D, (uint8_t[]){0x78}, 1, true);
 }
+
+
+
+
+
+esp_err_t waveshare_epaper_read_data_stop(waveshare_epaper_handle_t handle, bool* data_stop) {
+    if (handle->spi_device_handle == NULL) {
+#if CONFIG_WAVESHARE_EPAPER_ENABLE_DEBUG_LOG
+        ESP_LOGE(WaveshareEPaperLogTag, "handle must not be NULL");
+#endif
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    if (data_stop == NULL) {
+#if CONFIG_WAVESHARE_EPAPER_ENABLE_DEBUG_LOG
+        ESP_LOGE(WaveshareEPaperLogTag, "data_stop must not be NULL");
+#endif
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    uint8_t buffer = 0;
+    ESP_RETURN_ON_ERROR(waveshare_epaper_spi_send_with_response(handle, WAVESHARE_EPD_CMD_DATA_STOP, &buffer, 1), WaveshareEPaperLogTag, "Failed to read Data Stop (DSP)");
+    *data_stop = (buffer & 0x80) != 0;
+    return ESP_OK;
+}
+
+esp_err_t waveshare_epaper_read_temperature(waveshare_epaper_handle_t handle, bool internal, uint16_t* temperature) {
+    if (handle->spi_device_handle == NULL) {
+#if CONFIG_WAVESHARE_EPAPER_ENABLE_DEBUG_LOG
+        ESP_LOGE(WaveshareEPaperLogTag, "handle must not be NULL");
+#endif
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    if (temperature == NULL) {
+#if CONFIG_WAVESHARE_EPAPER_ENABLE_DEBUG_LOG
+        ESP_LOGE(WaveshareEPaperLogTag, "temperature must not be NULL");
+#endif
+        return ESP_ERR_INVALID_ARG;
+    }
+
+// TODO: Implement
+
+    return ESP_OK;
+}
+
+esp_err_t waveshare_epaper_read_low_power_state(waveshare_epaper_handle_t handle, bool* low_power_state) {
+    if (handle->spi_device_handle == NULL) {
+#if CONFIG_WAVESHARE_EPAPER_ENABLE_DEBUG_LOG
+        ESP_LOGE(WaveshareEPaperLogTag, "handle must not be NULL");
+#endif
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    if (low_power_state == NULL) {
+#if CONFIG_WAVESHARE_EPAPER_ENABLE_DEBUG_LOG
+        ESP_LOGE(WaveshareEPaperLogTag, "low_power_state must not be NULL");
+#endif
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    uint8_t buffer = 0;
+    ESP_RETURN_ON_ERROR(waveshare_epaper_spi_send_with_response(handle, WAVESHARE_EPD_CMD_LOW_POWER_DETECTION, &buffer, 1), WaveshareEPaperLogTag, "Failed to read Low Power State (LPD)");
+    // TODO: Enum. Low Power = 0. Normal = 1
+    *low_power_state = !((buffer & 0x01) != 0);
+    return ESP_OK;
+}
+
+esp_err_t waveshare_epaper_read_revision(waveshare_epaper_handle_t handle, uint32_t* revision) {
+    if (handle->spi_device_handle == NULL) {
+#if CONFIG_WAVESHARE_EPAPER_ENABLE_DEBUG_LOG
+        ESP_LOGE(WaveshareEPaperLogTag, "handle must not be NULL");
+#endif
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    if (revision == NULL) {
+#if CONFIG_WAVESHARE_EPAPER_ENABLE_DEBUG_LOG
+        ESP_LOGE(WaveshareEPaperLogTag, "revision must not be NULL");
+#endif
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    uint8_t buffer[3] = {0};
+    ESP_RETURN_ON_ERROR(waveshare_epaper_spi_send_with_response(handle, WAVESHARE_EPD_CMD_REVISION, buffer, sizeof(buffer) / sizeof(buffer[0])), WaveshareEPaperLogTag, "Failed to read Revision (REV)");
+    *revision = (buffer[0] * 1000) + (buffer[1] * 100) + buffer[2];
+    return ESP_OK;
+}
+
+esp_err_t waveshare_epaper_read_vcom(waveshare_epaper_handle_t handle, uint8_t* vcom) {
+    if (handle->spi_device_handle == NULL) {
+#if CONFIG_WAVESHARE_EPAPER_ENABLE_DEBUG_LOG
+        ESP_LOGE(WaveshareEPaperLogTag, "handle must not be NULL");
+#endif
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    if (vcom == NULL) {
+#if CONFIG_WAVESHARE_EPAPER_ENABLE_DEBUG_LOG
+        ESP_LOGE(WaveshareEPaperLogTag, "vcom must not be NULL");
+#endif
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    uint8_t buffer = 0;
+    ESP_RETURN_ON_ERROR(waveshare_epaper_spi_send_with_response(handle, WAVESHARE_EPD_CMD_VCOM_VALUE, &buffer, 1), WaveshareEPaperLogTag, "Failed to read VCOM Voltage (VV)");
+    // TODO: Create enum for this
+    *vcom = buffer;
+    return ESP_OK;
+}
+
+esp_err_t waveshare_epaper_read_revision2(waveshare_epaper_handle_t handle, uint8_t* revision2) {
+    if (handle->spi_device_handle == NULL) {
+#if CONFIG_WAVESHARE_EPAPER_ENABLE_DEBUG_LOG
+        ESP_LOGE(WaveshareEPaperLogTag, "handle must not be NULL");
+#endif
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    if (revision2 == NULL) {
+#if CONFIG_WAVESHARE_EPAPER_ENABLE_DEBUG_LOG
+        ESP_LOGE(WaveshareEPaperLogTag, "revision2 must not be NULL");
+#endif
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    uint8_t buffer = 0;
+    ESP_RETURN_ON_ERROR(waveshare_epaper_spi_send_with_response(handle, WAVESHARE_EPD_CMD_REVISION_2, &buffer, 1), WaveshareEPaperLogTag, "Failed to read Revision (REV2)");
+    *revision2 = buffer;
+    return ESP_OK;
+}
+
+
+
 
 
 
