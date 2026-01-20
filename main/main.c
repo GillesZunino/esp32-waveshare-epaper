@@ -192,8 +192,9 @@ void app_main(void) {
     // Read metadata from display
     // ------------------------------------------------------------------------------------------------------
 #if READ_FROM_DISPLAY
-    bool data_stop = false;
-    ESP_ERROR_CHECK(waveshare_epaper_read_data_stop(waveshare_epaper_handle, &data_stop));
+    // TODO: Should be done after a data transfert
+    // bool data_stop = false;
+    // ESP_ERROR_CHECK(waveshare_epaper_read_data_stop(waveshare_epaper_handle, &data_stop));
 
     uint16_t internal_temp = 0;
     ESP_ERROR_CHECK(waveshare_epaper_read_temperature(waveshare_epaper_handle, true, &internal_temp));

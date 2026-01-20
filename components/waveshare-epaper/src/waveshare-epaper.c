@@ -497,8 +497,12 @@ esp_err_t waveshare_epaper_read_temperature(waveshare_epaper_handle_t handle, bo
         return ESP_ERR_INVALID_ARG;
     }
 
-// TODO: Implement
-
+// TODO: Internal is default. External requires changing calibration to the external senseor not implemented right now
+    uint8_t buffer[2] = {0};
+    ESP_RETURN_ON_ERROR(waveshare_epaper_spi_send_with_response(handle, WAVESHARE_EPD_CMD_TEMPERATURE_SENSOR_COMMAND, buffer, sizeof(buffer) / sizeof(buffer[0])), WaveshareEPaperLogTag, "Failed to read Temperature (TSC)");
+    // TODO: There is an enum for this
+    // TODO: Pass otehr bits
+    *temperature = buffer[0];
     return ESP_OK;
 }
 

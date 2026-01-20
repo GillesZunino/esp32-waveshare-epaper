@@ -184,51 +184,63 @@ esp_err_t waveshare_epaper_spi_send_with_response(waveshare_epaper_handle_t hand
     // R9F - Read MTP Reserved bytes [1 bytes W / N byte R] where N = 0x63 + 1 (dummy)
 
 
-    waveshare_epaper_spi_isr_context_t isrContextCommand = {
-        .handle = handle,
-        .level = COMMAND_LEVEL
-    };
+     err = spi_device_acquire_bus(handle->spi_device_handle, portMAX_DELAY);
 
+        //
+        // Commands with data read back are performed in 3-wire SPI mode (MISO == MOSI) or SPI_DEVICE_HALFDUPLEX
+        //
+        //   * MOSI | <Command> | N/A    | N/A    | N/A    | N/A | N/A    |
+        //   * MOSI | N/A       | <Data> | <Data> | <Data> | ... | <Data> |
+        //
+        // In SPI_DEVICE_HALFDUPLEX mode, it is not possible to have both a TX and RX phase in the same transaction
+        // We also need to toggle to C/D line to COMMAND_LEVEL for the command phase and DATA_LEVEL for the data phase
+        //
+        // We send two separate transactions with one phase each TX or RX. This allows DMA to be used for both transactions
+        // In half duplex, DMA is only supported for transactions with a TX phase or an RX phase but not both at the same time
+        // 
 
-    //
-    // Commands with data read back are performed in 3-wire SPI mode (MISO == MOSI)
-    //   * MOSI | <Command> | N/A    | N/A    | N/A    | N/A | N/A    |
-    //   * MOSI | N/A       | <Data> | <Data> | <Data> | ... | <Data> |
-    //
+        waveshare_epaper_spi_isr_context_t isrContextCommand = {
+            .handle = handle,
+            .level = COMMAND_LEVEL
+        };
 
-// TODO; Will this work if we do not toggle C/D line to HIGH after the transmit ?
+        // Transaction to send the read command
+        spi_transaction_t commandTransaction = {
+            .flags = SPI_TRANS_USE_TXDATA,
+            .cmd = 0,
+            .addr = 0,
+            .length = 8,
+            .rxlength = 0,
+            .override_freq_hz = 0,
+            .user = (void*) &isrContextCommand,
+            .tx_data = { command },
+            .rx_buffer = NULL
+        };
 
-    //
-    // In SPI_DEVICE_HALFDUPLEX mode, it is not possible to have both a TX and RX phase in the same transaction
-    // We send the command using "cmd" and perform a "data read only" SPI transaction
-    // 
+        err = spi_device_polling_transmit(handle->spi_device_handle, (spi_transaction_t*) &commandTransaction);
 
-    // Transaction to trigger the read
-    bool useRxData = response_buffer_len <= 4;
-    spi_transaction_ext_t commandTransaction = {
-        .base = {
-            .flags = SPI_TRANS_VARIABLE_CMD | (useRxData ? SPI_TRANS_USE_RXDATA : 0),
-            .cmd = command,
+        bool useRxData = response_buffer_len <= 4;
+        spi_transaction_t dataTransaction = {
+            .flags = useRxData ? SPI_TRANS_USE_RXDATA : 0,
+            .cmd = 0,
             .addr = 0,
             .length = 0,
             .rxlength = response_buffer_len * 8,
             .override_freq_hz = 0,
             .user = (void*)&isrContextCommand,
             .tx_buffer = NULL,
-            .rx_buffer = useRxData ? NULL : (void*) response_buffer
-            // .rx_data = { 0 }
-        },
-        .command_bits = 8,
-        .address_bits = 0,
-        .dummy_bits = 0
-    };
+            .rx_buffer = useRxData ? NULL : response_buffer
+        };
+        isrContextCommand.level = DATA_LEVEL;
 
-    err = spi_device_polling_transmit(handle->spi_device_handle, (spi_transaction_t*) &commandTransaction);
+        err = spi_device_polling_transmit(handle->spi_device_handle, &dataTransaction);
+
+    spi_device_release_bus(handle->spi_device_handle);
 
     if (err == ESP_OK) {
-        // TODO; Can we avoid the copy ? Is it desirable to always pass the buffer even for 1 byte
+        // TODO: Can we avoid the copy ? Is it desirable to always pass the buffer even for 1 byte
         if (useRxData) {
-            memcpy(response_buffer, commandTransaction.base.rx_data, response_buffer_len);
+            memcpy(response_buffer, dataTransaction.rx_data, response_buffer_len);
         }
     }
 
