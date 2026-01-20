@@ -210,7 +210,7 @@ esp_err_t waveshare_epaper_spi_send_with_response(waveshare_epaper_handle_t hand
             .flags = SPI_TRANS_VARIABLE_CMD | (useRxData ? SPI_TRANS_USE_RXDATA : 0),
             .cmd = command,
             .addr = 0,
-            .length = response_buffer_len * 8, // Specify the transaction length. In this case only the size of read since we are setting up the command with .cmd
+            .length = 0,
             .rxlength = response_buffer_len * 8,
             .override_freq_hz = 0,
             .user = (void*)&isrContextCommand,
