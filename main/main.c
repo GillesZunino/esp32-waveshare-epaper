@@ -186,7 +186,7 @@ void app_main(void) {
 
 
 #define DRAW_TEST_PATTERN 0
-#define READ_FROM_DISPLAY 1
+#define READ_FROM_DISPLAY 0
 
     // ------------------------------------------------------------------------------------------------------
     // Read metadata from display
