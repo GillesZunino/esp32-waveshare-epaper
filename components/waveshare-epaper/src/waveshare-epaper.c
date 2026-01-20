@@ -253,7 +253,7 @@ typedef struct init_sequence_item {
 
 static DMA_ATTR init_sequence_item_t init_sequence[] = {
     {
-        // Dithering enable
+        // Dithering Start (Sierra Lite)
         .command = 0x4D,
         .data = { 0x78 },
         .data_length = 1
@@ -276,12 +276,28 @@ static DMA_ATTR init_sequence_item_t init_sequence[] = {
         .data = { 0x10, 0x54, 0x44 },
         .data_length = 3
     },
+
+    // TODO: Different from GitHub example
+    // EPD_2IN15G_SendCommand(0x06);
+    // EPD_2IN15G_SendData(0x0F);	
+    // EPD_2IN15G_SendData(0x0A);	
+    // EPD_2IN15G_SendData(0x2F);   	
+    // EPD_2IN15G_SendData(0x25);   	
+    // EPD_2IN15G_SendData(0x22);      	
+    // EPD_2IN15G_SendData(0x2E);   	
+    // EPD_2IN15G_SendData(0x21);  
     {
         // Booster Soft Start (BTST)
         .command = 0x06,
         .data = { 0x05, 0x00, 0x3F, 0x0A, 0x25, 0x12, 0x1A },
         .data_length = 7
     },
+
+    // TODO: Missing
+    // Temperature Sensor Calibration (TSE)
+    // EPD_2IN15G_SendCommand(0x41);
+    // EPD_2IN15G_SendData(0x00);	
+
     {
         // VCOM and Data Interval Setting (VDI)
         .command = 0x50,
@@ -294,12 +310,33 @@ static DMA_ATTR init_sequence_item_t init_sequence[] = {
         .data = { 0x02, 0x02 },
         .data_length = 2
     },
+
+    //TODO: Symbolic version of the commands
+    // EPD_2IN15G_SendCommand(0x61);
+    // EPD_2IN15G_SendData(EPD_2IN15G_WIDTH/256);		
+    // EPD_2IN15G_SendData(EPD_2IN15G_WIDTH%256);		
+    // EPD_2IN15G_SendData(EPD_2IN15G_HEIGHT/256);		
+    // EPD_2IN15G_SendData(EPD_2IN15G_HEIGHT%256); 	
     {
         // Resolution Settings (TRES)
         .command = 0x61,
         .data = { 0x00, 0xA0, 0x01, 0x28 },
         .data_length = 4
     },
+
+
+    // TODO: Missing
+    // Gate /Source Start Setting (GSST)
+    // EPD_2IN15G_SendCommand(0x65);
+    // EPD_2IN15G_SendData(0x00);
+    // EPD_2IN15G_SendData(0x00);
+    // EPD_2IN15G_SendData(0x00);
+    // EPD_2IN15G_SendData(0x00);
+
+    // TODO: Missing
+    // EPD_2IN15G_SendCommand(0xE0);
+    // EPD_2IN15G_SendData(0x00);
+
     {
         // TSBDRY - Temperature boundary phase C2
         .command = 0xE7,
@@ -330,12 +367,20 @@ static DMA_ATTR init_sequence_item_t init_sequence[] = {
         .data = { 0x01 },
         .data_length = 1
     },
+
+    // TODO: Different - PLL. They disable dytnamic frame rate and set refresh to 50Hz
+    // the code below enable dynamic frame rate and set refresh rate to 12.5Hz
+    // EPD_2IN15G_SendCommand(0x30);
+    // EPD_2IN15G_SendData(0x02);    
     {
         // PLL Control (PLL)
         .command = 0x30,
         .data = { 0x08 },
         .data_length = 1
     }
+
+    // TODO: Missing
+    //EPD_2IN15G_SendCommand(0x04);
 };
 
 esp_err_t waveshare_epaper_configure_display(waveshare_epaper_handle_t handle) {
