@@ -185,9 +185,13 @@ void app_main(void) {
     ESP_ERROR_CHECK(waveshare_epaper_configure_display(waveshare_epaper_handle));
 
 
+#define DRAW_TEST_PATTERN 0
+#define READ_FROM_DISPLAY 1
+
     // ------------------------------------------------------------------------------------------------------
     // Read metadata from display
     // ------------------------------------------------------------------------------------------------------
+#if READ_FROM_DISPLAY
     bool data_stop = false;
     ESP_ERROR_CHECK(waveshare_epaper_read_data_stop(waveshare_epaper_handle, &data_stop));
 
@@ -208,7 +212,7 @@ void app_main(void) {
 
     uint8_t revision2 = 0;
     ESP_ERROR_CHECK(waveshare_epaper_read_revision2(waveshare_epaper_handle, &revision2));
-
+#endif
 
 
     // ------------------------------------------------------------------------------------------------------
@@ -219,7 +223,7 @@ void app_main(void) {
     // * 10 -> Yellow
     // * 11 -> Red
     // ------------------------------------------------------------------------------------------------------
-    #if DRAW_TEST_PATTERN
+#if DRAW_TEST_PATTERN
     for (uint16_t pixel_height = 0; pixel_height < EPD_2IN15G_HEIGHT; pixel_height++) {
         for (uint16_t pixel_width = 0; pixel_width < EPD_2IN15G_WIDTH; pixel_width++) {
 
