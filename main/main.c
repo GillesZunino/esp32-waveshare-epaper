@@ -186,7 +186,10 @@ void app_main(void) {
 
 
 #define DRAW_TEST_PATTERN 0
+#define DRAW_ESPRESSIF_IMAGE 1
 #define READ_FROM_DISPLAY 0
+#define BLANK_DISPLAY 0
+
 
     // ------------------------------------------------------------------------------------------------------
     // Read metadata from display
@@ -254,13 +257,17 @@ void app_main(void) {
     ESP_ERROR_CHECK(waveshare_epaper_display_refresh(waveshare_epaper_handle));
 
     ESP_ERROR_CHECK(waveshare_epaper_display_power_off_and_sleep(waveshare_epaper_handle));
-#else
+#endif
+
+#if DRAW_ESPRESSIF_IMAGE
     ESP_ERROR_CHECK(draw_raw_image(waveshare_epaper_handle, gImage_2in15g, EPD_2IN15G_WIDTH, EPD_2IN15G_HEIGHT, image, image_size));
 #endif
 
 
+#if BLANK_DISPLAY
+    ESP_ERROR_CHECK(blank_display(waveshare_epaper_handle, width, height, image, image_size));
+#endif
 
-//    ESP_ERROR_CHECK(blank_display(waveshare_epaper_handle, width, height, image, image_size));
 
     do {
         vTaskDelay(pdMS_TO_TICKS(1000));
