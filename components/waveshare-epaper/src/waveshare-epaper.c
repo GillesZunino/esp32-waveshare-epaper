@@ -4,6 +4,9 @@
 
 #include <esp_check.h>
 
+
+#include "waveshare-epaper-logtag.h"
+
 #include "waveshare-epaper.h"
 #include "waveshare-epaper-context.h"
 #include "waveshare-epaper-spi.h"
@@ -11,7 +14,7 @@
 #include "waveshare-2in15-epaper-commands.h"
 
 
-static const char* WaveshareEPaperLogTag = "wepd";
+
 
 
 static inline esp_err_t enable_gpio_pins_private(const waveshare_epaper_config_t* config);

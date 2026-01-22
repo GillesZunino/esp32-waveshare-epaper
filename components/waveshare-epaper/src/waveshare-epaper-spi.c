@@ -5,6 +5,8 @@
 #include <esp_check.h>
 #include <esp_log.h>
 
+#include "waveshare-epaper-logtag.h"
+
 #include "waveshare-epaper.h"
 #include "waveshare-epaper-context.h"
 #include "waveshare-epaper-spi.h"
@@ -38,7 +40,7 @@ static void pre_spi_transaction_isr_callback(spi_transaction_t* t) {
     waveshare_epaper_spi_isr_context_t* userContext = (waveshare_epaper_spi_isr_context_t*)t->user;
     esp_err_t err = gpio_set_level(userContext->handle->hw_config.data_cmd_io_num, userContext->level);
     if (err != ESP_OK) {
-        ESP_EARLY_LOGE(TAG, "Failed to set DC line pre-SPI transaction");
+        ESP_EARLY_LOGE(WaveshareEPaperLogTag, "Failed to set DC line pre-SPI transaction");
     }
 }
 
@@ -46,7 +48,7 @@ static void post_spi_transaction_isr_callback(spi_transaction_t* t) {
     waveshare_epaper_spi_isr_context_t* userContext = (waveshare_epaper_spi_isr_context_t*)t->user;
     esp_err_t err = gpio_set_level(userContext->handle->hw_config.data_cmd_io_num, COMMAND_LEVEL);
     if (err != ESP_OK) {
-        ESP_EARLY_LOGE(TAG, "Failed to reset DC line post-SPI transaction");
+        ESP_EARLY_LOGE(WaveshareEPaperLogTag, "Failed to reset DC line post-SPI transaction");
     }
 }
 
