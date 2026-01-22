@@ -52,10 +52,13 @@ esp_err_t waveshare_epaper_driver_init(const waveshare_epaper_config_t* config, 
     // }
 
     // Allocate space for our handle
-    waveshare_epaper_context_t* pDisplay = heap_caps_calloc(1, sizeof(waveshare_epaper_context_t), MALLOC_CAP_DEFAULT);
+    waveshare_epaper_context_t* pDisplay = heap_caps_calloc(1, sizeof(waveshare_epaper_context_t), MALLOC_CAP_DMA /*MALLOC_CAP_DEFAULT*/);
     if (pDisplay == NULL) {
         return ESP_ERR_NO_MEM;
     }
+
+    // Allocate semaphore for BUSY pin interrupt handling
+    pDisplay->gpio_isr_context.busy_semaphore_handle = xSemaphoreCreateBinaryStatic(&pDisplay->gpio_isr_context.busy_semaphore);
 
     // Configure GPIO pins to communicate with the Waveshare ePaper display
     esp_err_t ret = ESP_OK;
@@ -89,6 +92,9 @@ esp_err_t waveshare_epaper_driver_init(const waveshare_epaper_config_t* config, 
     return ret;
 
 cleanup:
+    // No additional memory to release - Sempahore was allocated statically inside the context structure
+    pDisplay->gpio_isr_context.busy_semaphore_handle = NULL;
+
 // TODO: Shutdown GPIO
     free_driver_memory_private(pDisplay);
     return ret;
@@ -231,7 +237,7 @@ esp_err_t waveshare_epaper_display_power_off_and_sleep(waveshare_epaper_handle_t
 
 
 static esp_err_t waveshare_epaper_sleep_private(waveshare_epaper_handle_t handle) {
-    return waveshare_epaper_spi_send(handle, WAVESHARE_EPD_CMD_DEEP_SLEEP , (const uint8_t[]){ 0xA5 }, 1, true);
+    return waveshare_epaper_spi_send_private(handle, WAVESHARE_EPD_CMD_DEEP_SLEEP , (const uint8_t[]){ 0xA5 }, 1, true, true);
 }
 
 
@@ -239,7 +245,7 @@ static esp_err_t waveshare_epaper_power_on_off_private(waveshare_epaper_handle_t
     waveshare_epaper_command_t command = on ? WAVESHARE_EPD_CMD_POWER_ON : WAVESHARE_EPD_CMD_POWER_OFF;
     uint8_t data[1];
     data[0] = on ? 0x06 : (enableEpd ? 0x01 : 0x00);
-    return waveshare_epaper_spi_send(handle, command, data, sizeof(data) / sizeof(data[0]), true);
+    return waveshare_epaper_spi_send_private(handle, command, data, sizeof(data) / sizeof(data[0]), true, true);
 }
 
 
@@ -404,7 +410,7 @@ esp_err_t waveshare_epaper_configure_display(waveshare_epaper_handle_t handle) {
         for (uint16_t index = 0; index < sizeof(init_sequence) / sizeof(init_sequence_item_t); index++) {
             const init_sequence_item_t* item = &init_sequence[index];
             bool isLast = (index == (sizeof(init_sequence) / sizeof(init_sequence_item_t)) - 1);
-            err = waveshare_epaper_spi_send_exclusive(handle, item->command, item->data, item->data_length, isLast);
+            err = waveshare_epaper_spi_send_private(handle, item->command, item->data, item->data_length, false, isLast);
             if (err != ESP_OK){
                 break;
             }
@@ -424,7 +430,7 @@ esp_err_t waveshare_epaper_display_buffer(waveshare_epaper_handle_t handle, cons
         return ESP_ERR_INVALID_STATE;
     }
 
-    esp_err_t err = waveshare_epaper_spi_send(handle, WAVESHARE_EPD_CMD_DATA_START_TRANSMISSION, buffer, buffer_length, true);
+    esp_err_t err = waveshare_epaper_spi_send_private(handle, WAVESHARE_EPD_CMD_DATA_START_TRANSMISSION, buffer, buffer_length, true, true);
 
     // TODO: EPD_2IN15G_ReadBusyH()
     return err;
@@ -444,7 +450,7 @@ esp_err_t waveshare_epaper_display_refresh(waveshare_epaper_handle_t handle) {
     }
 
     // Refresh display - We choose VCOM follows LUTC (0x00)
-    esp_err_t err = waveshare_epaper_spi_send(handle, WAVESHARE_EPD_CMD_DISPLAY_REFRESH, (uint8_t[]){ 0x00 }, 1, true);
+    esp_err_t err = waveshare_epaper_spi_send_private(handle, WAVESHARE_EPD_CMD_DISPLAY_REFRESH, (uint8_t[]){ 0x00 }, 1, true, true);
 
     // while (!gpio_get_level(handle->hw_config.busy_io_num)) { // Data sheet asks to loop when Busy = LOW and proceed when Busy = HIGH
     //     vTaskDelay(pdMS_TO_TICKS(1));
@@ -457,7 +463,7 @@ esp_err_t waveshare_epaper_display_refresh(waveshare_epaper_handle_t handle) {
 
 esp_err_t test_spi_performance(waveshare_epaper_handle_t handle) {
     // TODO: REMOVE. this is temporary to test the fastest way to send data over SPI with the logic analyser
-    return waveshare_epaper_spi_send(handle, 0x4D, (uint8_t[]){0x78}, 1, true);
+    return waveshare_epaper_spi_send_private(handle, 0x4D, (uint8_t[]){0x78}, 1, true, true);
 }
 
 
@@ -480,7 +486,7 @@ esp_err_t waveshare_epaper_read_data_stop(waveshare_epaper_handle_t handle, bool
     }
 
     uint8_t buffer = 0;
-    ESP_RETURN_ON_ERROR(waveshare_epaper_spi_send_with_response(handle, WAVESHARE_EPD_CMD_DATA_STOP, &buffer, 1), WaveshareEPaperLogTag, "Failed to read Data Stop (DSP)");
+    ESP_RETURN_ON_ERROR(waveshare_epaper_spi_send_and_receive_private(handle, WAVESHARE_EPD_CMD_DATA_STOP, &buffer, 1), WaveshareEPaperLogTag, "Failed to read Data Stop (DSP)");
     *data_stop = (buffer & 0x80) != 0;
     return ESP_OK;
 }
@@ -502,7 +508,7 @@ esp_err_t waveshare_epaper_read_temperature(waveshare_epaper_handle_t handle, bo
 
 // TODO: Internal is default. External requires changing calibration to the external senseor not implemented right now
     uint8_t buffer[2] = {0};
-    ESP_RETURN_ON_ERROR(waveshare_epaper_spi_send_with_response(handle, WAVESHARE_EPD_CMD_TEMPERATURE_SENSOR_COMMAND, buffer, sizeof(buffer) / sizeof(buffer[0])), WaveshareEPaperLogTag, "Failed to read Temperature (TSC)");
+    ESP_RETURN_ON_ERROR(waveshare_epaper_spi_send_and_receive_private(handle, WAVESHARE_EPD_CMD_TEMPERATURE_SENSOR_COMMAND, buffer, sizeof(buffer) / sizeof(buffer[0])), WaveshareEPaperLogTag, "Failed to read Temperature (TSC)");
     // TODO: There is an enum for this
     // TODO: Pass otehr bits
     *temperature = buffer[0];
@@ -525,7 +531,7 @@ esp_err_t waveshare_epaper_read_low_power_state(waveshare_epaper_handle_t handle
     }
 
     uint8_t buffer = 0;
-    ESP_RETURN_ON_ERROR(waveshare_epaper_spi_send_with_response(handle, WAVESHARE_EPD_CMD_LOW_POWER_DETECTION, &buffer, 1), WaveshareEPaperLogTag, "Failed to read Low Power State (LPD)");
+    ESP_RETURN_ON_ERROR(waveshare_epaper_spi_send_and_receive_private(handle, WAVESHARE_EPD_CMD_LOW_POWER_DETECTION, &buffer, 1), WaveshareEPaperLogTag, "Failed to read Low Power State (LPD)");
     // TODO: Enum. Low Power = 0. Normal = 1
     *low_power_state = !((buffer & 0x01) != 0);
     return ESP_OK;
@@ -547,7 +553,7 @@ esp_err_t waveshare_epaper_read_revision(waveshare_epaper_handle_t handle, uint3
     }
 
     uint8_t buffer[3] = {0};
-    ESP_RETURN_ON_ERROR(waveshare_epaper_spi_send_with_response(handle, WAVESHARE_EPD_CMD_REVISION, buffer, sizeof(buffer) / sizeof(buffer[0])), WaveshareEPaperLogTag, "Failed to read Revision (REV)");
+    ESP_RETURN_ON_ERROR(waveshare_epaper_spi_send_and_receive_private(handle, WAVESHARE_EPD_CMD_REVISION, buffer, sizeof(buffer) / sizeof(buffer[0])), WaveshareEPaperLogTag, "Failed to read Revision (REV)");
     *revision = (buffer[0] * 1000) + (buffer[1] * 100) + buffer[2];
     return ESP_OK;
 }
@@ -568,7 +574,7 @@ esp_err_t waveshare_epaper_read_vcom(waveshare_epaper_handle_t handle, uint8_t* 
     }
 
     uint8_t buffer = 0;
-    ESP_RETURN_ON_ERROR(waveshare_epaper_spi_send_with_response(handle, WAVESHARE_EPD_CMD_VCOM_VALUE, &buffer, 1), WaveshareEPaperLogTag, "Failed to read VCOM Voltage (VV)");
+    ESP_RETURN_ON_ERROR(waveshare_epaper_spi_send_and_receive_private(handle, WAVESHARE_EPD_CMD_VCOM_VALUE, &buffer, 1), WaveshareEPaperLogTag, "Failed to read VCOM Voltage (VV)");
     // TODO: Create enum for this
     *vcom = buffer;
     return ESP_OK;
@@ -590,7 +596,7 @@ esp_err_t waveshare_epaper_read_revision2(waveshare_epaper_handle_t handle, uint
     }
 
     uint8_t buffer = 0;
-    ESP_RETURN_ON_ERROR(waveshare_epaper_spi_send_with_response(handle, WAVESHARE_EPD_CMD_REVISION_2, &buffer, 1), WaveshareEPaperLogTag, "Failed to read Revision (REV2)");
+    ESP_RETURN_ON_ERROR(waveshare_epaper_spi_send_and_receive_private(handle, WAVESHARE_EPD_CMD_REVISION_2, &buffer, 1), WaveshareEPaperLogTag, "Failed to read Revision (REV2)");
     *revision2 = buffer;
     return ESP_OK;
 }
@@ -611,6 +617,10 @@ static inline esp_err_t disable_gpio_pins_private(const waveshare_epaper_config_
 
 static esp_err_t configure_gpio_pins_private(const waveshare_epaper_config_t* config, bool enable) {
     esp_err_t ret = ESP_OK;
+
+    // Install ISR service if not already done - ESP_ERR_INVALID_STATE means "service already installed"
+    ret = gpio_install_isr_service(ESP_INTR_FLAG_IRAM);
+    ESP_RETURN_ON_FALSE((ret == ESP_OK) || (ret == ESP_ERR_INVALID_STATE), ESP_OK, WaveshareEPaperLogTag, "GPIO ISR service installation failed");
 
     // Configure CS pin - The pin level is initially set to HIGH to deselect the device
     gpio_config_t cs_io_conf = {
@@ -636,15 +646,16 @@ static esp_err_t configure_gpio_pins_private(const waveshare_epaper_config_t* co
         ESP_GOTO_ON_ERROR(gpio_set_level(config->hw_config.pwr_io_num, 0), cleanup, WaveshareEPaperLogTag, "Failed to set level (0) for POWER pin");
     }
 
-    // Configure BUSY pin as input
+    // Configure BUSY pin as input with interrupt on LOW -> HIGH
     gpio_config_t busy_io_conf = {
         .pin_bit_mask = BIT64(config->hw_config.busy_io_num),
         .mode = enable ? GPIO_MODE_INPUT : GPIO_MODE_DISABLE,
         .pull_up_en = GPIO_PULLUP_DISABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .intr_type = GPIO_INTR_DISABLE  // TODO: Enable interupts
+        .intr_type = GPIO_INTR_POSEDGE
     };
     ESP_GOTO_ON_ERROR(gpio_config(&busy_io_conf), cleanup, WaveshareEPaperLogTag, "Failed to configure GPIO for BUSY pin");
+    ESP_GOTO_ON_ERROR(gpio_intr_disable(config->hw_config.busy_io_num), cleanup, WaveshareEPaperLogTag, "Failed to disable interrupts on BUSY pin");
     
     // Configure RESET pin - The pin level is initially set to LOW to hold the device in RESET
     gpio_config_t rst_io_conf = {

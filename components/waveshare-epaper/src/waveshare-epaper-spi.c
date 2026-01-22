@@ -4,6 +4,8 @@
 
 #include <esp_check.h>
 #include <esp_log.h>
+#include <driver/spi_master.h>
+#include <driver/gpio.h>
 
 #include "waveshare-epaper-logtag.h"
 
@@ -12,48 +14,41 @@
 #include "waveshare-epaper-spi.h"
 
 
-
-static const char* TAG = "wepd_spi";
-
-
-
-
-typedef struct waveshare_epaper_spi_isr_context {
-    waveshare_epaper_handle_t handle;
-    command_data_level_t level;
-} waveshare_epaper_spi_isr_context_t;
+static void pre_spi_transaction_isr_callback(spi_transaction_t* t);
+static void post_spi_transaction_isr_callback(spi_transaction_t* t);
+static void busy_gpio_isr_handler(void* arg);
 
 
-static esp_err_t waveshare_epaper_spi_send_private(waveshare_epaper_handle_t handle, uint8_t command, const void* data, uint32_t data_len, bool acquire_bus, bool wait_on_busy);
+esp_err_t waveshare_epaper_spi_init_private(const waveshare_epaper_config_t* config, waveshare_epaper_handle_t handle) {
+    // Make sure BUSY interrupts are disabled - Add BUSY line GPIO ISR handler
+    esp_err_t ret = ESP_OK;
+    ESP_GOTO_ON_ERROR(gpio_intr_disable(config->hw_config.busy_io_num), cleanup, WaveshareEPaperLogTag, "Failed to disable BUSY GPIO interrupt");
+    ESP_GOTO_ON_ERROR(gpio_isr_handler_add(config->hw_config.busy_io_num, busy_gpio_isr_handler, handle), cleanup, WaveshareEPaperLogTag, "Failed to add BUSY GPIO ISR handler");
 
-esp_err_t wait_for_non_busy(waveshare_epaper_context_t* pDisplay);
+    // Pre-initialize all SPI transaction we need in our device handle
+    handle->spi_isr_context.cmd_transaction = (spi_transaction_t) {
+        .flags = SPI_TRANS_USE_TXDATA | SPI_TRANS_DMA_BUFFER_ALIGN_MANUAL,
+        .cmd = 0,
+        .addr = 0,
+        .length = sizeof(uint8_t) * 8,
+        .rxlength = 0,
+        .override_freq_hz = 0,
+        .user = (void*) handle,
+        .rx_buffer = NULL
+    };
+    handle->spi_isr_context.data_transaction = (spi_transaction_t) {
+        .flags = 0,
+        .cmd = 0,
+        .addr = 0,
+        .length = 0,
+        .rxlength = 0,
+        .override_freq_hz = 0,
+        .user = (void*) handle,
+        .tx_buffer = NULL,
+        .rx_buffer = NULL
+    };
 
-static void setup_gpio_interrupt(gpio_num_t busy_pin, gpio_isr_t isr_handler);
-static esp_err_t wait_for_non_busy_polling(waveshare_epaper_context_t* pDisplay);
-static esp_err_t wait_for_non_busy_interupt(waveshare_epaper_context_t* pDisplay);
-static void IRAM_ATTR gpio_isr_handler_eventgroup(void* arg);
-static esp_err_t wait_for_pin_high_event_group();
-
-
-
-static void pre_spi_transaction_isr_callback(spi_transaction_t* t) {
-    waveshare_epaper_spi_isr_context_t* userContext = (waveshare_epaper_spi_isr_context_t*)t->user;
-    esp_err_t err = gpio_set_level(userContext->handle->hw_config.data_cmd_io_num, userContext->level);
-    if (err != ESP_OK) {
-        ESP_EARLY_LOGE(WaveshareEPaperLogTag, "Failed to set DC line pre-SPI transaction");
-    }
-}
-
-static void post_spi_transaction_isr_callback(spi_transaction_t* t) {
-    waveshare_epaper_spi_isr_context_t* userContext = (waveshare_epaper_spi_isr_context_t*)t->user;
-    esp_err_t err = gpio_set_level(userContext->handle->hw_config.data_cmd_io_num, COMMAND_LEVEL);
-    if (err != ESP_OK) {
-        ESP_EARLY_LOGE(WaveshareEPaperLogTag, "Failed to reset DC line post-SPI transaction");
-    }
-}
-
-
-esp_err_t waveshare_epaper_spi_init_private(const waveshare_epaper_config_t* config, waveshare_epaper_context_t* pDisplay) {
+    // Add the target Waveshare ePaper device to as an SPI device on the given bus
     spi_device_interface_config_t spiDeviceInterfaceConfig = {
         .command_bits = 0,
         .address_bits = 0,
@@ -86,108 +81,78 @@ esp_err_t waveshare_epaper_spi_init_private(const waveshare_epaper_config_t* con
         .post_cb = post_spi_transaction_isr_callback
     };
 
-    return spi_bus_add_device(config->spi_cfg.host_id, &spiDeviceInterfaceConfig, &pDisplay->spi_device_handle);
+    ESP_GOTO_ON_ERROR(spi_bus_add_device(config->spi_cfg.host_id, &spiDeviceInterfaceConfig, &handle->spi_device_handle), cleanup, WaveshareEPaperLogTag, "Failed to add SPI device");
+    return ESP_OK;
+
+cleanup:
+    ESP_ERROR_CHECK_WITHOUT_ABORT(gpio_isr_handler_remove(config->hw_config.busy_io_num));
+    return ret;
 }
 
-
-esp_err_t waveshare_epaper_spi_send(waveshare_epaper_handle_t handle, uint8_t command, const void* data, uint32_t data_len, bool wait_on_busy) {
-    return waveshare_epaper_spi_send_private(handle, command, data, data_len, true, wait_on_busy);
-}
-
-esp_err_t waveshare_epaper_spi_send_exclusive(waveshare_epaper_handle_t handle, uint8_t command, const void* data, uint32_t data_len, bool wait_on_busy) {
-    return waveshare_epaper_spi_send_private(handle, command, data, data_len, false, wait_on_busy);
-}
-
-
-static esp_err_t waveshare_epaper_spi_send_private(waveshare_epaper_handle_t handle, uint8_t command, const void* data, uint32_t data_len, bool acquire_bus, bool wait_on_busy) {
-    esp_err_t err = ESP_OK;
-    if (acquire_bus) {
-        err = spi_device_acquire_bus(handle->spi_device_handle, portMAX_DELAY);
+esp_err_t waveshare_epaper_spi_send_private(waveshare_epaper_handle_t handle, uint8_t command, const uint8_t* data, size_t data_len, bool spi_bus_exclusive, bool wait_for_busy) {
+    // Acquire the SPI bus exclusively if requested
+    if (spi_bus_exclusive) {
+        ESP_RETURN_ON_ERROR(spi_device_acquire_bus(handle->spi_device_handle, portMAX_DELAY), WaveshareEPaperLogTag, "Failed to acquire SPI bus");
     }
-    
-        waveshare_epaper_spi_isr_context_t isrContextCommand = {
-            .handle = handle,
-            .level = COMMAND_LEVEL
-        };
-        
-        // Transaction for the command - DMA in SPI_DEVICE_HALFDUPLEX mode allowed since we only set SPI_TRANS_USE_TXDATA
-        spi_transaction_t commandTransaction = {
-            .flags = SPI_TRANS_USE_TXDATA,
-            .cmd = 0,
-            .addr = 0,
-            .length = sizeof(command) * 8,
-            .rxlength = 0,
-            .override_freq_hz = 0,
-            .user = (void*)&isrContextCommand,
-            //.tx_buffer = NULL,
-            .tx_data[0] = command,
-            .rx_buffer = NULL
-        };
 
-        err = spi_device_polling_transmit(handle->spi_device_handle, &commandTransaction);
-
-
-        // Transaction for the data- DMA in SPI_DEVICE_HALFDUPLEX mode allowed since we only set SPI_TRANS_USE_TXDATA
-        if ((data != NULL) && (data_len > 0)) {
-            bool useTxData = data_len <= 4;
-            spi_transaction_t dataTransaction = {
-                .flags = useTxData ? SPI_TRANS_USE_TXDATA : 0,
-                .cmd = 0,
-                .addr = 0,
-                .length = data_len * 8, // length in bits
-                .rxlength = 0,
-                .override_freq_hz = 0,
-                .user = (void*)&isrContextCommand,
-                
-                //.tx_buffer = data,
-                //.rx_buffer = NULL
-            };
-            isrContextCommand.level = DATA_LEVEL;
-
-            if (useTxData) {
-                memcpy(dataTransaction.tx_data, data, data_len);
-            } else {
-                dataTransaction.tx_buffer = data;
-            }
-
-            err = spi_device_polling_transmit(handle->spi_device_handle, &dataTransaction);
+        // Enable interupts on BUSY line if we need to wait for it later
+        esp_err_t ret = ESP_OK;
+        if (wait_for_busy) {
+            // Clear the semaphore in case it was already signalled - Enable BUSY GPIO interrupt
+            xSemaphoreTake(handle->gpio_isr_context.busy_semaphore_handle, 0);
+            ESP_GOTO_ON_ERROR(gpio_intr_enable(handle->hw_config.busy_io_num), cleanup, WaveshareEPaperLogTag, "Failed to enable BUSY GPIO interrupt");
         }
 
-    if (acquire_bus) {
+        // Configure and send SPI transaction for Command
+        handle->spi_isr_context.level = COMMAND_LEVEL;
+        handle->spi_isr_context.cmd_transaction.tx_data[0] = command;
+        ESP_GOTO_ON_ERROR(spi_device_polling_transmit(handle->spi_device_handle, &handle->spi_isr_context.cmd_transaction), cleanup, WaveshareEPaperLogTag, "Failed to send command over SPI");
+
+
+        // Configure and send SPI transaction for data - DMA in SPI_DEVICE_HALFDUPLEX mode is allowed since we only set SPI_TRANS_USE_TXDATA
+        if ((data != NULL) && (data_len > 0)) {
+            handle->spi_isr_context.level = DATA_LEVEL;
+
+            bool useTxData = data_len <= 4;
+            handle->spi_isr_context.data_transaction.rxlength = 0;
+            handle->spi_isr_context.data_transaction.rx_buffer = NULL;
+            handle->spi_isr_context.data_transaction.flags = (useTxData ? SPI_TRANS_USE_TXDATA : 0) | SPI_TRANS_DMA_BUFFER_ALIGN_MANUAL;
+            handle->spi_isr_context.data_transaction.length = data_len * 8;
+            if (useTxData) {
+                memcpy(handle->spi_isr_context.data_transaction.tx_data, data, data_len);
+            } else {
+                handle->spi_isr_context.data_transaction.tx_buffer = data;
+            }
+            ESP_GOTO_ON_ERROR(spi_device_polling_transmit(handle->spi_device_handle, &handle->spi_isr_context.data_transaction), cleanup, WaveshareEPaperLogTag, "Failed to send data over SPI");
+        }
+
+        // Wait for the BUSY signal to transition to HIGH (from LOW)
+        if (wait_for_busy) {
+            // If the BUSY line is low right now, wait for it to go high
+            if (gpio_get_level(handle->hw_config.busy_io_num) == 0) {
+                xSemaphoreTake(handle->gpio_isr_context.busy_semaphore_handle, portMAX_DELAY);
+            }
+        }
+
+cleanup:
+    if (wait_for_busy) {
+        // Disable BUSY GPIO interrupt and "take" the semaphore to clear any pending signal
+        ESP_ERROR_CHECK_WITHOUT_ABORT(gpio_intr_disable(handle->hw_config.busy_io_num));
+        xSemaphoreTake(handle->gpio_isr_context.busy_semaphore_handle, 0);
+    }
+
+    // Release the bus if we were asked to acquire it exclusively
+    if (spi_bus_exclusive) {
         spi_device_release_bus(handle->spi_device_handle);
     }
 
-    // TODO: Wait for BUSY to because "available"
-    if (wait_on_busy) {
-        err = wait_for_non_busy(handle);
-    }
-
-    return err;
+    return ret;
 }
 
-
-esp_err_t wait_for_non_busy(waveshare_epaper_context_t* pDisplay) {
-    return  wait_for_non_busy_polling(pDisplay);
-}
-
-
-esp_err_t waveshare_epaper_spi_send_with_response(waveshare_epaper_handle_t handle, uint8_t command, uint8_t* response_buffer, uint32_t response_buffer_len) {
-    esp_err_t err = ESP_OK;
-
-    // List of commands with a "read phase"
-    // R11 - Data Stop (DSP) [1 bytes W / 1 byte R]
-    // R40 - Temperature Sensor Command (TSC) [1 byte W / 2 bytes R]
-    // R43 - Temperature Sensor Read (TSR) [1 byte W / 2 bytes R]
-    // R51 - Low Power Detection (LPD) [1 bytes W / 1 byte R]
-    // R70 - Revision (REV) [1 byte W / 3 bytes R]
-    // R81 - VCOM VCOM Value (VV) [1 bytes W / 1 byte R]
-    // R92 - Read MTP Data (RMTP) [1 bytes W / N byte R] where N <= 0x17FF + 1 (dummy)
-    // R9E - Revision2 (REV2) [1 bytes W / 1 byte R]
-    // R9F - Read MTP Reserved bytes [1 bytes W / N byte R] where N = 0x63 + 1 (dummy)
-
-
-     err = spi_device_acquire_bus(handle->spi_device_handle, portMAX_DELAY);
-
+esp_err_t waveshare_epaper_spi_send_and_receive_private(waveshare_epaper_handle_t handle, uint8_t command, uint8_t* response_buffer, uint32_t response_buffer_len) {
+    // Acquire the SPI bus exclusively
+    ESP_RETURN_ON_ERROR(spi_device_acquire_bus(handle->spi_device_handle, portMAX_DELAY), WaveshareEPaperLogTag, "Failed to acquire SPI bus");
+    
         //
         // Commands with data read back are performed in 3-wire SPI mode (MISO == MOSI) or SPI_DEVICE_HALFDUPLEX
         //
@@ -199,139 +164,82 @@ esp_err_t waveshare_epaper_spi_send_with_response(waveshare_epaper_handle_t hand
         //
         // We send two separate transactions with one phase each TX or RX. This allows DMA to be used for both transactions
         // In half duplex, DMA is only supported for transactions with a TX phase or an RX phase but not both at the same time
-        // 
+        //
 
-        waveshare_epaper_spi_isr_context_t isrContextCommand = {
-            .handle = handle,
-            .level = COMMAND_LEVEL
-        };
+// TODO: Wait for BUSY ?
+        
+        // Configure and send SPI transaction for Command
+        esp_err_t ret = ESP_OK;
+        handle->spi_isr_context.level = COMMAND_LEVEL;
+        handle->spi_isr_context.cmd_transaction.tx_data[0] = command;
+        ESP_GOTO_ON_ERROR(spi_device_polling_transmit(handle->spi_device_handle, &handle->spi_isr_context.cmd_transaction), cleanup, WaveshareEPaperLogTag, "Failed to send command over SPI");
 
-        // Transaction to send the read command
-        spi_transaction_t commandTransaction = {
-            .flags = SPI_TRANS_USE_TXDATA,
-            .cmd = 0,
-            .addr = 0,
-            .length = 8,
-            .rxlength = 0,
-            .override_freq_hz = 0,
-            .user = (void*) &isrContextCommand,
-            .tx_data = { command },
-            .rx_buffer = NULL
-        };
 
-        err = spi_device_polling_transmit(handle->spi_device_handle, (spi_transaction_t*) &commandTransaction);
+        // Read back data from Waveshare ePaper device
+        handle->spi_isr_context.level = DATA_LEVEL;
 
         bool useRxData = response_buffer_len <= 4;
-        spi_transaction_t dataTransaction = {
-            .flags = useRxData ? SPI_TRANS_USE_RXDATA : 0,
-            .cmd = 0,
-            .addr = 0,
-            .length = 0,
-            .rxlength = response_buffer_len * 8,
-            .override_freq_hz = 0,
-            .user = (void*)&isrContextCommand,
-            .tx_buffer = NULL,
-            .rx_buffer = useRxData ? NULL : response_buffer
-        };
-        isrContextCommand.level = DATA_LEVEL;
-
-        err = spi_device_polling_transmit(handle->spi_device_handle, &dataTransaction);
-
-    spi_device_release_bus(handle->spi_device_handle);
-
-    if (err == ESP_OK) {
-        // TODO: Can we avoid the copy ? Is it desirable to always pass the buffer even for 1 byte
-        if (useRxData) {
-            memcpy(response_buffer, dataTransaction.rx_data, response_buffer_len);
+        handle->spi_isr_context.data_transaction.length = 0;
+        handle->spi_isr_context.data_transaction.tx_buffer = NULL;
+        handle->spi_isr_context.data_transaction.flags = (useRxData ? SPI_TRANS_USE_RXDATA : 0) | SPI_TRANS_DMA_BUFFER_ALIGN_MANUAL;
+        handle->spi_isr_context.data_transaction.rxlength = response_buffer_len * 8;
+        handle->spi_isr_context.data_transaction.rx_buffer = useRxData ? NULL : response_buffer;
+        ESP_GOTO_ON_ERROR(spi_device_polling_transmit(handle->spi_device_handle, &handle->spi_isr_context.data_transaction), cleanup, WaveshareEPaperLogTag, "Failed to read data over SPI");
+        
+// TODO: Await for BUSY?
+        if (ret == ESP_OK) {
+            if (useRxData) {
+                memcpy(response_buffer, handle->spi_isr_context.data_transaction.rx_data, response_buffer_len);
+            }
         }
-    }
 
-    return err;
-
+cleanup:
+    spi_device_release_bus(handle->spi_device_handle);
+    return ret;
 }
 
 
-// BUSY LOW -> idle
-// BUSY HIGH -> busy
-
-//-------------------- polling based ------------------------
-static esp_err_t wait_for_non_busy_polling(waveshare_epaper_context_t* pDisplay) {
-    // EXPECT: 1 to 10ms ?
-    while (!gpio_get_level(pDisplay->hw_config.busy_io_num)) {
-        vTaskDelay(pdMS_TO_TICKS(1));
+// -----------------------------------------------------------------------------------------------------------------------------------
+// SPI transactions ISR callbacks
+//
+static IRAM_ATTR void pre_spi_transaction_isr_callback(spi_transaction_t* t) {
+    waveshare_epaper_handle_t handle = (waveshare_epaper_handle_t)t->user;
+    esp_err_t err __attribute__((unused)) = gpio_set_level(handle->hw_config.data_cmd_io_num, handle->spi_isr_context.level);
+#if CONFIG_WAVESHARE_EPAPER_ENABLE_DEBUG_LOG
+    if (err != ESP_OK) {
+        ESP_EARLY_LOGE(WaveshareEPaperLogTag, "Failed to set DC line pre-SPI transaction");
     }
-
-    return ESP_OK;
+#endif
 }
-// --------------------------------------------------------
 
-// -------------------- semnaphore based ------------------------
-static DMA_ATTR SemaphoreHandle_t gpio_semaphore = NULL;
-static bool irq_attr_initialized = false;
+static IRAM_ATTR void post_spi_transaction_isr_callback(spi_transaction_t* t) {
+    waveshare_epaper_handle_t handle = (waveshare_epaper_handle_t)t->user;
+    esp_err_t err __attribute__((unused)) = gpio_set_level(handle->hw_config.data_cmd_io_num, COMMAND_LEVEL);
+#if CONFIG_WAVESHARE_EPAPER_ENABLE_DEBUG_LOG
+    if (err != ESP_OK) {
+        ESP_EARLY_LOGE(WaveshareEPaperLogTag, "Failed to reset DC line post-SPI transaction");
+    }
+#endif
+}
+// -----------------------------------------------------------------------------------------------------------------------------------
 
-static void IRAM_ATTR gpio_isr_handler(void* arg) {
+
+// -----------------------------------------------------------------------------------------------------------------------------------
+// GPIO ISR handler for BUSY pin
+//
+static IRAM_ATTR void busy_gpio_isr_handler(void* arg) {
+    waveshare_epaper_handle_t handle = (waveshare_epaper_handle_t) arg;
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-    xSemaphoreGiveFromISR(gpio_semaphore, &xHigherPriorityTaskWoken);
-    if (xHigherPriorityTaskWoken) {
-        portYIELD_FROM_ISR();
+    BaseType_t semaphoreGiveOutcome = xSemaphoreGiveFromISR(handle->gpio_isr_context.busy_semaphore_handle, &xHigherPriorityTaskWoken);
+    if (semaphoreGiveOutcome == pdTRUE) {
+        // Request a FreeRTOS context switch if giving the semaphore unblocked a higher priority task (FreeRTOS cannot switch tasks inside of an ISR)
+        if (xHigherPriorityTaskWoken) {
+            portYIELD_FROM_ISR();
+        }
+    } else {
+#if CONFIG_WAVESHARE_EPAPER_ENABLE_DEBUG_LOG
+        ESP_EARLY_LOGE(WaveshareEPaperLogTag, "Failed to give BUSY semaphore from ISR");
+#endif
     }
 }
-
-static void setup_gpio_interrupt(gpio_num_t busy_pin, gpio_isr_t isr_handler) {
-    if (irq_attr_initialized) {
-        return;
-    }
-
-    gpio_semaphore = xSemaphoreCreateBinary();
-    
-    gpio_config_t io_conf = {
-        .pin_bit_mask = (1ULL << busy_pin),
-        .mode = GPIO_MODE_INPUT,
-        .pull_up_en = GPIO_PULLUP_DISABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .intr_type = GPIO_INTR_NEGEDGE
-    };
-    gpio_config(&io_conf);
-    
-    gpio_install_isr_service(ESP_INTR_FLAG_IRAM);
-    gpio_isr_handler_add(busy_pin, isr_handler, NULL);
-
-    irq_attr_initialized = true;
-}
-
-static esp_err_t wait_for_non_busy_interupt(waveshare_epaper_context_t* pDisplay) {
-    // EXPECT: 10 to 100 micro seconds ? (10 to 50 micro seconds overhead)
-    xSemaphoreTake(gpio_semaphore, portMAX_DELAY);
-    return ESP_OK;
-}
-
-// use with
-//  setup_gpio_interrupt(handle->hw_config.busy_io_num, gpio_isr_handler);
-//  wait_for_non_busy_interupt(handle);
-// -------------------------------------------------------------
-
-
-// -------------------- EventGroup based ------------------------
-static EventGroupHandle_t gpio_event_group;
-#define PIN_HIGH_BIT BIT0
-
-
-static void IRAM_ATTR gpio_isr_handler_eventgroup(void* arg) {
-    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-    xEventGroupSetBitsFromISR(gpio_event_group, PIN_HIGH_BIT, &xHigherPriorityTaskWoken);
-    if (xHigherPriorityTaskWoken) {
-        portYIELD_FROM_ISR();
-    }
-}
-
-static esp_err_t wait_for_pin_high_event_group() {
-    xEventGroupWaitBits(gpio_event_group, PIN_HIGH_BIT, 
-                        pdTRUE, pdFALSE, portMAX_DELAY);
-            return ESP_OK;
-}
-// Use with
-//  setup_gpio_interrupt(handle->hw_config.busy_io_num, gpio_isr_handler_eventgroup);
-//  wait_for_pin_high_event_group();
-// --------------------------------------------------------------
-
-// ULP ?
+// -----------------------------------------------------------------------------------------------------------------------------------
