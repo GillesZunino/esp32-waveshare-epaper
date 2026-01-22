@@ -5,4 +5,4 @@
 #include "waveshare-epaper-logtag.h"
 
 
-const char* WaveshareEPaperLogTag = "wAV_epd";
+const char* WaveshareEPaperLogTag = "wav_epd";
