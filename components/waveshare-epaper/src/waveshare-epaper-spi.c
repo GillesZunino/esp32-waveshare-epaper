@@ -89,6 +89,34 @@ cleanup:
     return ret;
 }
 
+esp_err_t waveshare_epaper_spi_free_private(waveshare_epaper_handle_t handle) {
+    // Track the first error we encounter so we can return it to the caller - We do try to detach all aspects of the driver regardless of which step failed
+    esp_err_t firstError = ESP_OK;
+
+    // Disable interrupts on BUSY line
+    esp_err_t err = gpio_intr_disable(handle->hw_config.busy_io_num);
+    if (err != ESP_OK) {
+        firstError = firstError == ESP_OK ? err : firstError;
+        ESP_LOGW(WaveshareEPaperLogTag, "Failed to disable BUSY GPIO interrupt (%d)", err);
+    }
+
+    // Remve ISR handler for BUSY line
+    err = gpio_isr_handler_remove(handle->hw_config.busy_io_num);
+    if (err != ESP_OK) {
+        firstError = firstError == ESP_OK ? err : firstError;
+        ESP_LOGW(WaveshareEPaperLogTag, "Failed to remove BUSY GPIO ISR handler (%d)", err);
+    }
+
+    // Remove SPI device from bus
+    err = spi_bus_remove_device(handle->spi_device_handle);
+    if (err != ESP_OK) {
+        firstError = firstError == ESP_OK ? err : firstError;
+        ESP_LOGW(WaveshareEPaperLogTag, "Failed to spi_bus_remove_device() -> (%d)", err);
+    }
+
+    return firstError;
+}
+
 esp_err_t waveshare_epaper_spi_send_private(waveshare_epaper_handle_t handle, uint8_t command, const uint8_t* data, size_t data_len, bool spi_bus_exclusive, bool wait_for_busy) {
     // Acquire the SPI bus exclusively if requested
     if (spi_bus_exclusive) {

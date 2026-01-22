@@ -101,9 +101,15 @@ cleanup:
 }
 
 esp_err_t waveshare_epaper_driver_free(waveshare_epaper_handle_t handle) {
-    if (handle->spi_device_handle == NULL) {
+    if (handle == NULL) {
 #if CONFIG_WAVESHARE_EPAPER_ENABLE_DEBUG_LOG
         ESP_LOGE(WaveshareEPaperLogTag, "handle must not be NULL");
+#endif
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (handle->spi_device_handle == NULL) {
+#if CONFIG_WAVESHARE_EPAPER_ENABLE_DEBUG_LOG
+        ESP_LOGE(WaveshareEPaperLogTag, "handle must have been initialized  with waveshare_epaper_driver_init()");
 #endif
         return ESP_ERR_INVALID_STATE;
     }
@@ -118,11 +124,11 @@ esp_err_t waveshare_epaper_driver_free(waveshare_epaper_handle_t handle) {
     //     ESP_LOGW(WaveshareEPaperLogTag, "Failed to set MAX7219/MAX7221 in shutdown mode (%d)", err);
     // }
 
-    // Remove the device from the bus
-    esp_err_t err = spi_bus_remove_device(handle->spi_device_handle);
+    // Remove the device from the bus, cleanup interupt handlers ...
+    esp_err_t err = waveshare_epaper_spi_free_private(handle);
     if (err != ESP_OK) {
         firstError = firstError == ESP_OK ? err : firstError;
-        ESP_LOGW(WaveshareEPaperLogTag, "Failed to spi_bus_remove_device() -> (%d)", err);
+        ESP_LOGW(WaveshareEPaperLogTag, "Failed to cleanup SPI bus -> (%d)", err);
     }
 
     // SHutdown GPIO pins - TODO: re-enable this

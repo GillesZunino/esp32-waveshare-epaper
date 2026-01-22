@@ -58,6 +58,23 @@ esp_err_t waveshare_epaper_spi_init_private(const waveshare_epaper_config_t* con
 
 
 /**
+ * @brief Deinitialize the SPI device and BUSY GPIO interrupt for a Waveshare ePaper panel.
+ *
+ * Removes the SPI device from the bus, disables the BUSY pin ISR, and releases associated resources.
+ * Reverses the setup performed by `waveshare_epaper_spi_init_private`.
+ *
+ * This is a driver-only utility; user applications must not call it directly.
+ *
+ * @param[in] handle Driver handle for the target display.
+ *
+ * @return
+ *      - ESP_OK on success
+ *      - Error code from `spi_bus_remove_device` or `gpio_isr_handler_remove`
+ */
+esp_err_t waveshare_epaper_spi_free_private(waveshare_epaper_handle_t handle);
+
+
+/**
  * @brief Send a command with optional payload over SPI to the device.
  *
  * Manages Command/Data line levels, optional SPI bus exclusive acquisition, and optional BUSY pin waits.
