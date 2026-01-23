@@ -236,7 +236,9 @@ esp_err_t waveshare_epaper_display_power_off_and_sleep(waveshare_epaper_handle_t
         vTaskDelay(pdMS_TO_TICKS(1));
     }
 
-    ESP_RETURN_ON_ERROR(waveshare_epaper_sleep_private(handle), WaveshareEPaperLogTag, "Failed to put ePaper display to sleep");
+    //ESP_RETURN_ON_ERROR(waveshare_epaper_sleep_private(handle), WaveshareEPaperLogTag, "Failed to put ePaper display to sleep");
+
+    ESP_RETURN_ON_ERROR(waveshare_epaper_spi_send_private(handle, WAVESHARE_EPD_CMD_DEEP_SLEEP , (const uint8_t[]){ 0xA5 }, 1, true, false), WaveshareEPaperLogTag, "Failed to put ePaper display to sleep");
     vTaskDelay(pdMS_TO_TICKS(200));
 
     return ESP_OK;

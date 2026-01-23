@@ -135,13 +135,16 @@ esp_err_t draw_test_pattern(waveshare_epaper_handle_t waveshare_epaper_handle, u
 
 esp_err_t display_full_refresh_sleep_poweroff(waveshare_epaper_handle_t waveshare_epaper_handle) {
     // Software power on the display
-    ESP_ERROR_CHECK(waveshare_epaper_display_on_off(waveshare_epaper_handle, true, false));\
+    ESP_ERROR_CHECK(waveshare_epaper_display_on_off(waveshare_epaper_handle, true, false));
     // Full display refresh
     ESP_ERROR_CHECK(waveshare_epaper_display_refresh(waveshare_epaper_handle));
     // Software power off and put the display to sleep
     ESP_ERROR_CHECK(waveshare_epaper_display_power_off_and_sleep(waveshare_epaper_handle));
     // Physically power off the ePaper display to save power and reduce wear
     ESP_ERROR_CHECK(waveshare_epaper_hardware_power_on_off(waveshare_epaper_handle, false, pdMS_TO_TICKS(0)));
+
+    // Set the RESET line low for future power up
+    ESP_ERROR_CHECK(gpio_set_level(RST_PIN, 0));
 
     return ESP_OK;
 }   
@@ -153,7 +156,7 @@ static void wait_with_wdt(uint32_t seconds) {
     const TickType_t slice_ticks = pdMS_TO_TICKS(1000); // 1 s slices keep margin under 10 s
     for (uint32_t elapsed = 0; elapsed < seconds; elapsed++) {
         vTaskDelay(slice_ticks);
-        ESP_ERROR_CHECK(esp_task_wdt_reset());
+        // ESP_ERROR_CHECK(esp_task_wdt_reset());
     }
 }
 
@@ -265,6 +268,10 @@ void app_main(void) {
         // Wait 180s without tripping the 10 s watchdog
         wait_with_wdt(180);
 
+        // Power on physically
+        ESP_ERROR_CHECK(waveshare_epaper_hardware_power_on_off(waveshare_epaper_handle, true, pdMS_TO_TICKS(200)));
+        ESP_ERROR_CHECK(reset_epaper_hardware(waveshare_epaper_handle));
+
         // Show the test image for 180s
         ESP_ERROR_CHECK(waveshare_epaper_configure_display(waveshare_epaper_handle));
         ESP_ERROR_CHECK(draw_raw_image(waveshare_epaper_handle, gImage_2in15g, EPD_2IN15G_WIDTH, EPD_2IN15G_HEIGHT, image, image_size));
@@ -272,6 +279,21 @@ void app_main(void) {
 
         // Wait 180s without tripping the 10 s watchdog
         wait_with_wdt(180);
+
+        // Power on physically
+        ESP_ERROR_CHECK(waveshare_epaper_hardware_power_on_off(waveshare_epaper_handle, true, pdMS_TO_TICKS(200)));
+        ESP_ERROR_CHECK(reset_epaper_hardware(waveshare_epaper_handle));
+
+
+        ESP_ERROR_CHECK(waveshare_epaper_configure_display(waveshare_epaper_handle));
+        ESP_ERROR_CHECK(blank_display(waveshare_epaper_handle, width, height, image, image_size));
+        ESP_ERROR_CHECK(display_full_refresh_sleep_poweroff(waveshare_epaper_handle));
+
+        wait_with_wdt(180);
+        ESP_ERROR_CHECK(waveshare_epaper_hardware_power_on_off(waveshare_epaper_handle, true, pdMS_TO_TICKS(200)));
+        ESP_ERROR_CHECK(reset_epaper_hardware(waveshare_epaper_handle));
+
+
     } while (true);
 
 
