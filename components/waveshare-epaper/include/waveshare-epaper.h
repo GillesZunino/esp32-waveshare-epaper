@@ -81,19 +81,22 @@ esp_err_t waveshare_epaper_driver_free(waveshare_epaper_handle_t handle);
 
 
 /**
- * @brief Turn the power of the Waveshare ePaper display on or off.
+ * @brief Turn the Waveshare ePaper display power on or off via hardware GPIO,.
  * 
  * @param[in] handle Handle to the Waveshare ePaper display driver
  * @param[in] on Boolean value to turn the display on (`true`) or off (`false`)
+ * @param[in] waitTime Time to wait after changing the power state before returning, in RTOS ticks
  * 
- * @note Uses the POWER GPIO pin configured during driver initialization. Does nothing if the pin was set to `GPIO_NUM_NC`.
+ * @note This requires the display to be equipped with a GPIO Power on/off line and the driver to be configured accordingly.
+ *       Set the `pwr_io_num` field in `waveshare_epaper_hw_config_t` to the appropriate GPIO pin.
  * 
  * @return
  *      - ESP_OK: Successfully set the power state
  *      - ESP_ERR_INVALID_STATE: Driver is not installed or in an invalid state
  *      - ESP_ERR_INVALID_ARG: Invalid argument, e.g. POWER pin set to `GPIO_NUM_NC`
  */
-esp_err_t set_epaper_power(waveshare_epaper_handle_t handle, bool on);
+esp_err_t waveshare_epaper_hardware_power_on_off(waveshare_epaper_handle_t handle, bool on, TickType_t waitTime);
+
 
 esp_err_t reset_epaper_hardware(waveshare_epaper_handle_t handle);
 
