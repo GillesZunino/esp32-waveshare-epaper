@@ -13,6 +13,7 @@
 
 #include "waveshare-2in15-epaper-commands.h"
 
+#include "waveshare-epaper-config-validation.h"
 
 
 
@@ -32,6 +33,12 @@ static void free_driver_memory_private(waveshare_epaper_handle_t handle);
 
 
 esp_err_t waveshare_epaper_driver_init(const waveshare_epaper_config_t* config, waveshare_epaper_handle_t* handle) {
+    if (config == NULL) {
+#if CONFIG_WAVESHARE_EPAPER_ENABLE_DEBUG_LOG
+        ESP_LOGE(WaveshareEPaperLogTag, "config must not be NULL");
+#endif
+        return ESP_ERR_INVALID_ARG;
+    }
     if (handle == NULL) {
 #if CONFIG_WAVESHARE_EPAPER_ENABLE_DEBUG_LOG
         ESP_LOGE(WaveshareEPaperLogTag, "handle must not be NULL");
@@ -42,14 +49,8 @@ esp_err_t waveshare_epaper_driver_init(const waveshare_epaper_config_t* config, 
     // Always clear return values even if we later fail
     *handle = NULL;
 
-    // TODO: Check configuration
-    //ESP_RETURN_ON_ERROR(check_driver_configuration_private(config), WaveshareEPaperLogTag, "Invalid configuration");
-
-    // TODO: Filter out invalid configurations when using ISRs
-    // if (config->spi_cfg.host_id == SPI1_HOST) {
-    //     ESP_LOGE(TAG, "interrupt cannot be used on SPI1 host.");
-    //     return ESP_ERR_INVALID_ARG;
-    // }
+    // Validate configuration
+    ESP_RETURN_ON_ERROR(validate_waveshare_epaper_configuration_private(config), WaveshareEPaperLogTag, "Invalid configuration");
 
     // Allocate space for our handle
     waveshare_epaper_context_t* pDisplay = heap_caps_calloc(1, sizeof(waveshare_epaper_context_t), MALLOC_CAP_DMA /*MALLOC_CAP_DEFAULT*/);

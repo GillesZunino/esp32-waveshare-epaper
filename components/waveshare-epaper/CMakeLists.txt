@@ -1,6 +1,8 @@
 set(srcs
     "src/waveshare-epaper-logtag.c"
 
+    "src/waveshare-epaper-config-validation.c"
+    
     "src/waveshare-epaper-spi.c"
     "src/waveshare-epaper.c"
 )
