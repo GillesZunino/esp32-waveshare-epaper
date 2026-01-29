@@ -234,7 +234,7 @@ void app_main(void) {
     // Read metadata from display
     // ------------------------------------------------------------------------------------------------------
 #if READ_FROM_DISPLAY
-    // TODO: Should be done after a data transfert
+    // TODO: Should be done after a data transfer
     // bool data_stop = false;
     // ESP_ERROR_CHECK(waveshare_epaper_read_data_stop(waveshare_epaper_handle, &data_stop));
 

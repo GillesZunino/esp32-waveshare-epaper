@@ -87,7 +87,7 @@ esp_err_t waveshare_epaper_driver_init(const waveshare_epaper_config_t* config, 
     return ret;
 
 cleanup:
-    // No additional memory to release - Sempahore was allocated statically inside the context structure
+    // No additional memory to release - Semaphore was allocated statically inside the context structure
     pDisplay->gpio_isr_context.busy_semaphore_handle = NULL;
 
 // TODO: Shutdown GPIO
@@ -104,7 +104,7 @@ esp_err_t waveshare_epaper_driver_free(waveshare_epaper_handle_t handle) {
     }
     if (handle->spi_device_handle == NULL) {
 #if CONFIG_WAVESHARE_EPAPER_ENABLE_DEBUG_LOG
-        ESP_LOGE(WaveshareEPaperLogTag, "handle must have been initialized  with waveshare_epaper_driver_init()");
+        ESP_LOGE(WaveshareEPaperLogTag, "handle must have been initialized with waveshare_epaper_driver_init()");
 #endif
         return ESP_ERR_INVALID_STATE;
     }
@@ -119,14 +119,14 @@ esp_err_t waveshare_epaper_driver_free(waveshare_epaper_handle_t handle) {
     //     ESP_LOGW(WaveshareEPaperLogTag, "Failed to set MAX7219/MAX7221 in shutdown mode (%d)", err);
     // }
 
-    // Remove the device from the bus, cleanup interupt handlers ...
+    // Remove the device from the bus, cleanup interrupt handlers ...
     esp_err_t err = waveshare_epaper_spi_free_private(handle);
     if (err != ESP_OK) {
         firstError = firstError == ESP_OK ? err : firstError;
         ESP_LOGW(WaveshareEPaperLogTag, "Failed to cleanup SPI bus -> (%d)", err);
     }
 
-    // SHutdown GPIO pins - TODO: re-enable this
+    // Shutdown GPIO pins - TODO: re-enable this
     // err = disable_gpio_pins_private(&handle->hw_config);
     // TODO: Handle error right - This is vibe coded++
     if (err != ESP_OK) {
@@ -209,7 +209,7 @@ esp_err_t waveshare_epaper_display_on_off(waveshare_epaper_handle_t handle, bool
 
     esp_err_t err = waveshare_epaper_power_on_off_private(handle, on, enableEpd);
 
-    // Wait for HIgh
+    // Wait for High
     while (!gpio_get_level(handle->hw_config.busy_io_num)) { // Data sheet asks to loop when Busy = LOW and proceed when Busy = HIGH
         vTaskDelay(pdMS_TO_TICKS(1));
     }
@@ -231,7 +231,7 @@ esp_err_t waveshare_epaper_display_power_off_and_sleep(waveshare_epaper_handle_t
     }
 
     ESP_RETURN_ON_ERROR(waveshare_epaper_power_on_off_private(handle, false, false), WaveshareEPaperLogTag, "Failed to power off ePaper display");
-    // Wait for HIgh
+    // Wait for High
     while (!gpio_get_level(handle->hw_config.busy_io_num)) { // Data sheet asks to loop when Busy = LOW and proceed when Busy = HIGH
         vTaskDelay(pdMS_TO_TICKS(1));
     }

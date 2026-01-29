@@ -100,7 +100,7 @@ esp_err_t waveshare_epaper_spi_free_private(waveshare_epaper_handle_t handle) {
         ESP_LOGW(WaveshareEPaperLogTag, "Failed to disable BUSY GPIO interrupt (%d)", err);
     }
 
-    // Remve ISR handler for BUSY line
+    // Remove ISR handler for BUSY line
     err = gpio_isr_handler_remove(handle->hw_config.busy_io_num);
     if (err != ESP_OK) {
         firstError = firstError == ESP_OK ? err : firstError;
@@ -123,7 +123,7 @@ esp_err_t waveshare_epaper_spi_send_private(waveshare_epaper_handle_t handle, ui
         ESP_RETURN_ON_ERROR(spi_device_acquire_bus(handle->spi_device_handle, portMAX_DELAY), WaveshareEPaperLogTag, "Failed to acquire SPI bus");
     }
 
-        // Enable interupts on BUSY line if we need to wait for it later
+        // Enable interrupts on BUSY line if we need to wait for it later
         esp_err_t ret = ESP_OK;
         if (wait_for_busy) {
             // Clear the semaphore in case it was already signalled - Enable BUSY GPIO interrupt
