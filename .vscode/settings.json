@@ -4,20 +4,18 @@
   "cmake.configureOnEdit": false,
   "cmake.configureOnOpen": false,
 
-    //
-    // ESP-IDF - Extension wide settings for the configuration [EIM v0.7.1]
-    //
-    //  * "idf.eimIdfJsonPath": "C:\\Tools\\esp-eim\\eim_idf.json"
-    //  * "idf.eimExecutableArgs": [
-    //      "gui",
-    //      "-c", "C:\\Tools\\esp-eim\\Configuration\\esp-idf-config.toml",
-    //      "--esp-idf-json-path", "C:\\Tools\\esp-eim\\eim_idf.json"
-    //    ]
-    //
-    //  ESP-IDF Per project (settings.json) configurations [EIM v0.7.1]
-    //  * "idf.currentSetup": Path to the selected ESP-IDF version to use (aka C:\\Tools\\esp-eim\\v5.5.2\\esp-idf)
-    //
-    "idf.currentSetup": "C:\\Tools\\esp-eim\\v5.5.2\\esp-idf",
+  //
+  // ESP-IDF - Extension wide settings for the configuration [VS Code v2.0.x] [EIM v0.8.0]
+  //
+  //  * "idf.eimIdfJsonPath": "D:\\espressif\\\\eim_idf.json"
+  //  * "idf.eimExecutableArgs": [
+  //      "gui"
+  //    ]
+  //
+  //  ESP-IDF Per project (settings.json) configurations [VS Code v2.0.x] [EIM v0.8.0]
+  //  * "idf.currentSetup": Path to the selected ESP-IDF version to use (aka D:\\espressif\\vx.y.z\\esp-idf)
+  //
+  "idf.currentSetup": "D:\\espressif\\v5.5.2\\esp-idf",
 
   "idf.customExtraVars": {
     "IDF_TARGET": "esp32s3"
