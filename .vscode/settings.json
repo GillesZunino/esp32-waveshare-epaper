@@ -4,24 +4,20 @@
   "cmake.configureOnEdit": false,
   "cmake.configureOnOpen": false,
 
-  // Windows specific ESP IDF paths and tools
-  "idf.espIdfPathWin": "D:\\espressif\\v5.5.2\\esp-idf",
-  "idf.toolsPathWin": "D:\\espressif\\v5.5.2\\tools",
-
-  // Linux / MacOS specific ESP IDF paths and tools
-  // NOTE: For Espressif Docker images, comment out the following two lines to accept the ambient image configuration
-  "idf.espIdfPath": "/Users/gzunino/Documents/Espressif/v5.5.2/esp-idf",
-  "idf.toolsPath": "/Users/gzunino/Documents/Espressif/v5.5.2/tools",
-
-  "idf.pythonInstallPath": "D:\\espressif\\v5.5.2\\tools\\tools\\idf-python\\3.11.2\\python.exe",
-
-  // Clang settings
-  "clangd.path": "D:\\espressif\\v5.5.2\\tools\\tools\\esp-clang\\esp-19.1.2_20250312\\esp-clang\\bin\\clangd.exe",
-  "clangd.arguments": [
-    "--background-index",
-    "--query-driver=**",
-    "--compile-commands-dir=d:\\Projects\\GillesZunino-GitHub\\esp32-holiday-tree/build-devboard-debug"
-  ],
+    //
+    // ESP-IDF - Extension wide settings for the configuration [EIM v0.7.1]
+    //
+    //  * "idf.eimIdfJsonPath": "C:\\Tools\\esp-eim\\eim_idf.json"
+    //  * "idf.eimExecutableArgs": [
+    //      "gui",
+    //      "-c", "C:\\Tools\\esp-eim\\Configuration\\esp-idf-config.toml",
+    //      "--esp-idf-json-path", "C:\\Tools\\esp-eim\\eim_idf.json"
+    //    ]
+    //
+    //  ESP-IDF Per project (settings.json) configurations [EIM v0.7.1]
+    //  * "idf.currentSetup": Path to the selected ESP-IDF version to use (aka C:\\Tools\\esp-eim\\v5.5.2\\esp-idf)
+    //
+    "idf.currentSetup": "C:\\Tools\\esp-eim\\v5.5.2\\esp-idf",
 
   "idf.customExtraVars": {
     "IDF_TARGET": "esp32s3"
