@@ -274,7 +274,7 @@ esp_err_t waveshare_epaper_display_on_refresh_display_off(waveshare_epaper_handl
 
     // Trigger AUTO sequence 0x17 (PON -> DRF -> POF -> DSLP) or 0xA5 (PON -> DRF -> POF) depending on whether we want to enter deep sleep or not
 // TODO: Do weneed to wait for BUSY on deep sleep requeast as well ?
-    return waveshare_epaper_spi_send_private(handle, WAVESHARE_EPD_CMD_AUTO_SEQUENCE, (const uint8_t[]){ enter_deepsleep ? 0xA7 : 0xA5 }, 1, true, true);
+    return waveshare_epaper_spi_send_private(handle, WAVESHARE_EPD_CMD_AUTO_SEQUENCE, (const uint8_t[]){ enter_deepsleep ? 0xA7 : 0xA5 }, 1, true, !enter_deepsleep);
 
     // TODO: Attach to display read
     // TODO: Should be done after a data transfer
