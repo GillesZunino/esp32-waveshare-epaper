@@ -269,6 +269,7 @@ void app_main(void) {
 
 
         // Show the test pattern for 180s
+        ESP_LOGI(TAG, "Drawing test pattern");
         ESP_ERROR_CHECK(draw_test_pattern(waveshare_epaper_handle, EPD_2IN15G_WIDTH, EPD_2IN15G_HEIGHT, image, image_size));
         ESP_ERROR_CHECK(waveshare_epaper_display_on_refresh_display_off(waveshare_epaper_handle, true));
         safe_watchdog_wait(180);
@@ -278,6 +279,7 @@ void app_main(void) {
         ESP_ERROR_CHECK(waveshare_epaper_configure_display(waveshare_epaper_handle));
 
         // Show the test image for 180s
+        ESP_LOGI(TAG, "Drawing Espressif test image");
         ESP_ERROR_CHECK(draw_raw_image(waveshare_epaper_handle, gImage_2in15g, EPD_2IN15G_WIDTH, EPD_2IN15G_HEIGHT, image, image_size));
         ESP_ERROR_CHECK(waveshare_epaper_display_on_refresh_display_off(waveshare_epaper_handle, true));
         safe_watchdog_wait(180);
@@ -287,6 +289,7 @@ void app_main(void) {
         ESP_ERROR_CHECK(waveshare_epaper_configure_display(waveshare_epaper_handle));
 
         // Blank display for 180s
+        ESP_LOGI(TAG, "Blanking display");
         ESP_ERROR_CHECK(blank_display(waveshare_epaper_handle, width, height, image, image_size));
         ESP_ERROR_CHECK(waveshare_epaper_display_on_refresh_display_off(waveshare_epaper_handle, true));
         safe_watchdog_wait(180);
