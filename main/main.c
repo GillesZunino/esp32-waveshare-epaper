@@ -155,9 +155,16 @@ esp_err_t draw_test_pattern(waveshare_epaper_handle_t waveshare_epaper_handle, u
 
 static void safe_watchdog_wait(uint32_t seconds) {
     // Wait in slices to avoid triggering the watchdog - We use CONFIG_ESP_TASK_WDT_TIMEOUT_S (default 5s) -1 to avoid waking up too frequently
-    const TickType_t slice_ticks = pdMS_TO_TICKS((CONFIG_ESP_TASK_WDT_TIMEOUT_S - 1) * 1000);
-    for (uint32_t elapsed = 0; elapsed < seconds; elapsed++) {
+    const uint32_t slice_seconds = CONFIG_ESP_TASK_WDT_TIMEOUT_S - 1;
+    const TickType_t slice_ticks = pdMS_TO_TICKS(slice_seconds * 1000);
+    const uint32_t total_slices = seconds / slice_seconds;
+    for (uint32_t slice_count = 0; slice_count < total_slices; slice_count++) {
         vTaskDelay(slice_ticks);
+    }
+
+    uint32_t remaining_seconds = seconds % slice_seconds;
+    if (remaining_seconds > 0) {
+        vTaskDelay(pdMS_TO_TICKS(remaining_seconds * 1000));
     }
 }
 
