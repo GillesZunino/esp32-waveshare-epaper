@@ -103,7 +103,7 @@ esp_err_t draw_test_pattern(waveshare_epaper_handle_t waveshare_epaper_handle, u
     for (uint16_t pixel_height = 0; pixel_height < height; pixel_height++) {
         for (uint16_t pixel_width = 0; pixel_width < width; pixel_width++) {
 
-            size_t byte_index = (pixel_width / 4) + (pixel_height * width);
+            size_t byte_index = (pixel_width / 4) + (pixel_height * (width / 4));
             uint8_t pixel_value = 0;
 
 // ------------------------------------------------------------------------------------------------------
@@ -182,7 +182,7 @@ void app_main(void) {
 
 
     // Allocate a buffer (DMA capable)
-    uint16_t width = (EPD_2IN15G_WIDTH % 4 == 0)? (EPD_2IN15G_WIDTH / 4) : (EPD_2IN15G_WIDTH / 4 + 1);
+    uint16_t width = (EPD_2IN15G_WIDTH % 4 == 0) ? (EPD_2IN15G_WIDTH / 4) : (EPD_2IN15G_WIDTH / 4 + 1);
     uint16_t height = EPD_2IN15G_HEIGHT;
     // TODO: Make sure this is correctly aligned when allocated
     size_t image_size = width * height;
