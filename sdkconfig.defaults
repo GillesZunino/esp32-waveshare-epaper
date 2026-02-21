@@ -1,0 +1,12 @@
+# -----------------------------------------------------------------------------------
+# Copyright 2026, Gilles Zunino
+# -----------------------------------------------------------------------------------
+
+# Raise task Watchdog to 20s - ePaper displays can take up to 15s to refresh
+CONFIG_ESP_TASK_WDT_TIMEOUT_S=20
+
+# Configure Flash Size = 8MB - Make ESPTOOL autodetect Flash Size
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=n
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="8MB"
+CONFIG_ESPTOOLPY_HEADER_FLASHSIZE_UPDATE=y
