@@ -143,19 +143,6 @@ esp_err_t draw_test_pattern(waveshare_epaper_handle_t waveshare_epaper_handle, u
 }
 
 
-// esp_err_t display_full_refresh_sleep_poweroff(waveshare_epaper_handle_t waveshare_epaper_handle) {
-//     // Software power on the display
-//     ESP_ERROR_CHECK(waveshare_epaper_display_on_off(waveshare_epaper_handle, true, false));
-//     // Full display refresh
-//     ESP_ERROR_CHECK(waveshare_epaper_display_refresh(waveshare_epaper_handle));
-//     // Software power off and put the display to sleep
-//     ESP_ERROR_CHECK(waveshare_epaper_display_power_off_and_sleep(waveshare_epaper_handle));
-//     // Turn hardware power to display off - Put the RESET Line low (RESET)
-//     ESP_ERROR_CHECK(waveshare_epaper_hardware_power_off_and_assert_reset(waveshare_epaper_handle, PowerOffDelayTicks));
-//     return ESP_OK;
-// }
-
-
 
 static void safe_watchdog_wait(uint32_t seconds) {
     // Wait in slices to avoid triggering the watchdog - We use CONFIG_ESP_TASK_WDT_TIMEOUT_S (default 5s) -1 to avoid waking up too frequently
