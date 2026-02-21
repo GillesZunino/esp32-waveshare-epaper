@@ -34,6 +34,8 @@ const gpio_num_t PWR_PIN = ;
 const gpio_num_t BUSY_PIN = ;
 const gpio_num_t RST_PIN = ;
 const gpio_num_t DATA_CMD_PIN = ;
+
+const gpio_num_t LOGIC_ANALYZER_TRIGGER_PIN = ;
 #else
 #if CONFIG_IDF_TARGET_ESP32S3
 const gpio_num_t CS_PIN = GPIO_NUM_10;
@@ -45,7 +47,7 @@ const gpio_num_t BUSY_PIN = GPIO_NUM_9;
 const gpio_num_t RST_PIN = GPIO_NUM_13;
 const gpio_num_t DATA_CMD_PIN = GPIO_NUM_14;
 
-const gpio_num_t LA_TRIGGER_PIN = GPIO_NUM_6; // Logic Analyzer trigger pin
+const gpio_num_t LOGIC_ANALYZER_TRIGGER_PIN = GPIO_NUM_6;
 #else
 #if CONFIG_IDF_TARGET_ESP32C3
 const gpio_num_t CS_PIN = GPIO_NUM_1;
@@ -56,6 +58,8 @@ const gpio_num_t PWR_PIN = ;
 const gpio_num_t BUSY_PIN = ;
 const gpio_num_t RST_PIN = ;
 const gpio_num_t DATA_CMD_PIN = ;
+
+const gpio_num_t LOGIC_ANALYZER_TRIGGER_PIN = ;
 #endif
 #endif
 #endif
@@ -169,24 +173,36 @@ static void safe_watchdog_wait(uint32_t seconds) {
 }
 
 
-
-void app_main(void) {
-
-    // Logic Analyzer trigger
-    // Configure CS pin - The pin level is initially set to HIGH to deselect the device
+esp_err_t trigger_logic_analyzer(gpio_num_t trigger_pin, TickType_t pulse_length_ticks) {
     gpio_config_t cs_io_conf = {
-        .pin_bit_mask = BIT64(LA_TRIGGER_PIN),
+        .pin_bit_mask = BIT64(trigger_pin),
         .mode = GPIO_MODE_OUTPUT,
         .pull_up_en = GPIO_PULLUP_DISABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
         .intr_type = GPIO_INTR_DISABLE
     };
-    ESP_ERROR_CHECK(gpio_config(&cs_io_conf));
-    ESP_ERROR_CHECK(gpio_set_level(LA_TRIGGER_PIN, 0));
-    vTaskDelay(pdMS_TO_TICKS(120));
-    ESP_ERROR_CHECK(gpio_set_level(LA_TRIGGER_PIN, 1));
+
+    ESP_RETURN_ON_ERROR(gpio_config(&cs_io_conf), TAG, "Failed to configure GPIO for Logic Analyzer trigger pin");
+
+    // Create a "guard time" in which we force the GPIO pin to LOW
+    ESP_LOGI(TAG, "[LOGIC ANALYZER] -> _");
+    ESP_RETURN_ON_ERROR(gpio_set_level(trigger_pin, 0), TAG, "Failed to set Logic Analyzer trigger pin low");
+    vTaskDelay(pdMS_TO_TICKS(5));
+
+    // Create the GPIO pulse from LOW to HIGH and back to LOW
+    ESP_LOGI(TAG, "[LOGIC ANALYZER] -> _|");
+    ESP_RETURN_ON_ERROR(gpio_set_level(trigger_pin, 1), TAG, "Failed to set Logic Analyzer trigger pin high");
+    vTaskDelay(pulse_length_ticks);
+    ESP_LOGI(TAG, "[LOGIC ANALYZER] -> |_");
+    ESP_RETURN_ON_ERROR(gpio_set_level(trigger_pin, 0), TAG, "Failed to set Logic Analyzer trigger pin low");
+    return ESP_OK;
+}
 
 
+
+void app_main(void) {
+
+    trigger_logic_analyzer(LOGIC_ANALYZER_TRIGGER_PIN, pdMS_TO_TICKS(10));
 
     // Allocate a buffer (DMA capable)
     uint16_t width = (EPD_2IN15G_WIDTH % 4 == 0) ? (EPD_2IN15G_WIDTH / 4) : (EPD_2IN15G_WIDTH / 4 + 1);
@@ -273,7 +289,6 @@ void app_main(void) {
         // The display is assumed to have been powered on, taken our of reset and configured to display content
         // It is NOT required for the display high voltage to be on (aka 'software power on')
         // ------------------------------------------------------------------------------------------------------
-
 
         // Show the test pattern for 180s
         ESP_LOGI(TAG, "Drawing test pattern");
