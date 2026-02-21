@@ -160,6 +160,8 @@ static void safe_watchdog_wait(uint32_t seconds) {
 }
 
 
+#define TRIGGER_LOGIC_ANALYZER() trigger_logic_analyzer(LOGIC_ANALYZER_TRIGGER_PIN, pdMS_TO_TICKS(40))
+
 esp_err_t trigger_logic_analyzer(gpio_num_t trigger_pin, TickType_t pulse_length_ticks) {
     gpio_config_t cs_io_conf = {
         .pin_bit_mask = BIT64(trigger_pin),
@@ -174,7 +176,7 @@ esp_err_t trigger_logic_analyzer(gpio_num_t trigger_pin, TickType_t pulse_length
     // Create a "guard time" in which we force the GPIO pin to LOW
     ESP_LOGI(TAG, "[LOGIC ANALYZER] -> _");
     ESP_RETURN_ON_ERROR(gpio_set_level(trigger_pin, 0), TAG, "Failed to set Logic Analyzer trigger pin low");
-    vTaskDelay(pdMS_TO_TICKS(5));
+    vTaskDelay(pulse_length_ticks);
 
     // Create the GPIO pulse from LOW to HIGH and back to LOW
     ESP_LOGI(TAG, "[LOGIC ANALYZER] -> _|");
