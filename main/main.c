@@ -145,7 +145,7 @@ esp_err_t draw_test_pattern(waveshare_epaper_handle_t waveshare_epaper_handle, u
 
 
 static void safe_watchdog_wait(uint32_t seconds) {
-    // Wait in slices to avoid triggering the watchdog - We use CONFIG_ESP_TASK_WDT_TIMEOUT_S (default 5s) -1 to avoid waking up too frequently
+    // Wait in slices to avoid triggering the watchdog - We use CONFIG_ESP_TASK_WDT_TIMEOUT_S (default 5s - customized to 20s) -1 to avoid waking up too frequently
     const uint32_t slice_seconds = CONFIG_ESP_TASK_WDT_TIMEOUT_S - 1;
     const TickType_t slice_ticks = pdMS_TO_TICKS(slice_seconds * 1000);
     const uint32_t total_slices = seconds / slice_seconds;
@@ -160,18 +160,26 @@ static void safe_watchdog_wait(uint32_t seconds) {
 }
 
 
-#define TRIGGER_LOGIC_ANALYZER() trigger_logic_analyzer(LOGIC_ANALYZER_TRIGGER_PIN, pdMS_TO_TICKS(40))
+#ifdef ENABLE_LOGIC_ANALYZER
+    #define TRIGGER_LOGIC_ANALYZER() trigger_logic_analyzer(LOGIC_ANALYZER_TRIGGER_PIN, pdMS_TO_TICKS(40))
+#else
+    #define TRIGGER_LOGIC_ANALYZER() ((void)0)
+#endif
 
 esp_err_t trigger_logic_analyzer(gpio_num_t trigger_pin, TickType_t pulse_length_ticks) {
-    gpio_config_t cs_io_conf = {
-        .pin_bit_mask = BIT64(trigger_pin),
-        .mode = GPIO_MODE_OUTPUT,
-        .pull_up_en = GPIO_PULLUP_DISABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .intr_type = GPIO_INTR_DISABLE
-    };
+    static bool is_trigger_pin_configured = false;
+    if (!is_trigger_pin_configured) {
+        gpio_config_t cs_io_conf = {
+            .pin_bit_mask = BIT64(trigger_pin),
+            .mode = GPIO_MODE_OUTPUT,
+            .pull_up_en = GPIO_PULLUP_DISABLE,
+            .pull_down_en = GPIO_PULLDOWN_DISABLE,
+            .intr_type = GPIO_INTR_DISABLE
+        };
 
-    ESP_RETURN_ON_ERROR(gpio_config(&cs_io_conf), TAG, "Failed to configure GPIO for Logic Analyzer trigger pin");
+        ESP_RETURN_ON_ERROR(gpio_config(&cs_io_conf), TAG, "Failed to configure GPIO for Logic Analyzer trigger pin");
+        is_trigger_pin_configured = true;
+    }
 
     // Create a "guard time" in which we force the GPIO pin to LOW
     ESP_LOGI(TAG, "[LOGIC ANALYZER] -> _");
@@ -191,7 +199,7 @@ esp_err_t trigger_logic_analyzer(gpio_num_t trigger_pin, TickType_t pulse_length
 
 void app_main(void) {
 
-    trigger_logic_analyzer(LOGIC_ANALYZER_TRIGGER_PIN, pdMS_TO_TICKS(10));
+TRIGGER_LOGIC_ANALYZER();
 
     // Allocate a buffer (DMA capable)
     uint16_t width = (EPD_2IN15G_WIDTH % 4 == 0) ? (EPD_2IN15G_WIDTH / 4) : (EPD_2IN15G_WIDTH / 4 + 1);
@@ -286,6 +294,8 @@ void app_main(void) {
         ESP_ERROR_CHECK(waveshare_epaper_hardware_power_off_and_assert_reset(waveshare_epaper_handle, PowerOffDelayTicks));
         safe_watchdog_wait(180);
 
+TRIGGER_LOGIC_ANALYZER();
+
         // Power on physically, reset the device and re-configure
         ESP_ERROR_CHECK(waveshare_epaper_hardware_power_on_and_deassert_reset(waveshare_epaper_handle, PowerOnDelayTicks));
         ESP_ERROR_CHECK(waveshare_epaper_configure_display(waveshare_epaper_handle));
@@ -297,6 +307,8 @@ void app_main(void) {
         ESP_ERROR_CHECK(waveshare_epaper_hardware_power_off_and_assert_reset(waveshare_epaper_handle, PowerOffDelayTicks));
         safe_watchdog_wait(180);
 
+TRIGGER_LOGIC_ANALYZER();
+
         // Power on physically, reset the device and re-configure
         ESP_ERROR_CHECK(waveshare_epaper_hardware_power_on_and_deassert_reset(waveshare_epaper_handle, PowerOnDelayTicks));
         ESP_ERROR_CHECK(waveshare_epaper_configure_display(waveshare_epaper_handle));
@@ -307,6 +319,8 @@ void app_main(void) {
         ESP_ERROR_CHECK(waveshare_epaper_display_on_refresh_display_off(waveshare_epaper_handle, true));
         ESP_ERROR_CHECK(waveshare_epaper_hardware_power_off_and_assert_reset(waveshare_epaper_handle, PowerOffDelayTicks));
         safe_watchdog_wait(180);
+
+TRIGGER_LOGIC_ANALYZER();
 
         // Prepare the display for the next loop iteration
         ESP_ERROR_CHECK(waveshare_epaper_hardware_power_on_and_deassert_reset(waveshare_epaper_handle, PowerOnDelayTicks));
