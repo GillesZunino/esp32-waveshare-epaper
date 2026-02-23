@@ -90,17 +90,14 @@ esp_err_t blank_display(waveshare_epaper_handle_t waveshare_epaper_handle, uint1
     // }
 
     memset(image, 0x55, image_size); // Set all pixels to white
-    ESP_ERROR_CHECK(waveshare_epaper_send_data_buffer(waveshare_epaper_handle, image, image_size));
-
-    return ESP_OK;
+    return waveshare_epaper_send_data_buffer(waveshare_epaper_handle, image, image_size);
 }
 
 
 esp_err_t draw_raw_image(waveshare_epaper_handle_t waveshare_epaper_handle, const uint8_t* raw_image, uint16_t width, uint16_t height, uint8_t* image, size_t image_size) {
     // Copy the sample image to a DMA capable memory buffer
     memcpy(image, raw_image, image_size);
-    ESP_ERROR_CHECK(waveshare_epaper_send_data_buffer(waveshare_epaper_handle, image, image_size));
-    return ESP_OK;
+    return waveshare_epaper_send_data_buffer(waveshare_epaper_handle, image, image_size);
 }
 
 
