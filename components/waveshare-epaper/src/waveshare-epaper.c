@@ -272,19 +272,37 @@ esp_err_t waveshare_epaper_display_on_refresh_display_off(waveshare_epaper_handl
 
 // TODO: Do we need to wait for BUSY to proceed here ?
 
+
+#define DISCRETE_COMMANDS 1
+#if DISCRETE_COMMANDS
+
+    esp_err_t err = waveshare_epaper_display_on_off(handle, true, false);
+    // Full display refresh
+    err = waveshare_epaper_display_refresh(handle);
+
+    // Software power off and put the display to sleep
+    err = waveshare_epaper_display_power_off_and_sleep(handle);
+
+    // // Turn hardware power to display off - Put the RESET Line low (RESET)
+    // err = waveshare_epaper_hardware_power_off_and_assert_reset(handle, pdMS_TO_TICKS(50));
+
+    return ESP_OK;
+
+#else
+
     // Trigger AUTO sequence 0x17 (PON -> DRF -> POF -> DSLP) or 0xA5 (PON -> DRF -> POF) depending on whether we want to enter deep sleep or not
-// TODO: Do weneed to wait for BUSY on deep sleep requeast as well ?
-    return waveshare_epaper_spi_send_private(handle, WAVESHARE_EPD_CMD_AUTO_SEQUENCE, (const uint8_t[]){ enter_deepsleep ? 0xA7 : 0xA5 }, 1, true, !enter_deepsleep);
+    // TODO: Do weneed to wait for BUSY on deep sleep requeast as well ?
+
+// TODO: When deep sleep is desired, we need to send the command separately as the sequence does not fire busy
+
+    return waveshare_epaper_spi_send_private(handle, WAVESHARE_EPD_CMD_AUTO_SEQUENCE, (const uint8_t[]){ enter_deepsleep ? 0xA7 : 0xA5 }, 1, true, true);
+
+#endif
 
     // TODO: Attach to display read
     // TODO: Should be done after a data transfer
     // bool data_stop = false;
     // ESP_ERROR_CHECK(waveshare_epaper_read_data_stop(waveshare_epaper_handle, &data_stop));
-}
-
-
-
-
 
 
 
@@ -308,7 +326,7 @@ esp_err_t waveshare_epaper_display_on_refresh_display_off(waveshare_epaper_handl
 //     vTaskDelay(pdMS_TO_TICKS(200)); // TODO: 200 ms - Verify timings
 
 //     return err;
-// }
+}
 
 
 esp_err_t waveshare_epaper_display_sleep(waveshare_epaper_handle_t handle) {

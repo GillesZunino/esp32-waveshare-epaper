@@ -82,14 +82,8 @@ waveshare_epaper_handle_t waveshare_epaper_handle = NULL;
 
 
 esp_err_t blank_display(waveshare_epaper_handle_t waveshare_epaper_handle, uint16_t width, uint16_t height, uint8_t* image, size_t image_size) {
-    // Clear
-    // for (uint16_t pixel_height = 0; pixel_height < height; pixel_height++) {
-    //     for (uint16_t pixel_width = 0; pixel_width < width; pixel_width++) {
-    //         image[pixel_width + pixel_height * width] = (0x01 << 6) | (0x01 << 4) | (0x01 << 2) | 0x01; 
-    //     }
-    // }
-
-    memset(image, 0x55, image_size); // Set all pixels to white
+    // Set all pixels to white
+    memset(image, 0x55, image_size);
     return waveshare_epaper_send_data_buffer(waveshare_epaper_handle, image, image_size);
 }
 
