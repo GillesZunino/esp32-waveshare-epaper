@@ -4,6 +4,7 @@
 
 set(srcs
         "main.c"
+        "test_patterns.c"
         "sample_image2in15.c"
 )
 
