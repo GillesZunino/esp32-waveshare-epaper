@@ -241,9 +241,9 @@ TRIGGER_LOGIC_ANALYZER();
         // It is NOT required for the display high voltage to be on (aka 'software power on')
         // ------------------------------------------------------------------------------------------------------
 
-        // Show the test pattern for 180s
-        ESP_LOGI(TAG, "Drawing test pattern");
-        ESP_ERROR_CHECK(draw_test_pattern(waveshare_epaper_handle, EPD_2IN15G_WIDTH, EPD_2IN15G_HEIGHT, image, image_size));
+        // Show the hatch test pattern for 180s
+        ESP_LOGI(TAG, "Drawing hatch test pattern");
+        ESP_ERROR_CHECK(draw_hatch_test_pattern(waveshare_epaper_handle, EPD_2IN15G_WIDTH, EPD_2IN15G_HEIGHT, image, image_size));
         ESP_ERROR_CHECK(waveshare_epaper_display_on_refresh_display_off(waveshare_epaper_handle, true));
         ESP_ERROR_CHECK(waveshare_epaper_hardware_power_off_and_assert_reset(waveshare_epaper_handle, PowerOffDelayTicks));
         safe_watchdog_wait(180);
@@ -254,7 +254,31 @@ TRIGGER_LOGIC_ANALYZER();
         ESP_ERROR_CHECK(waveshare_epaper_hardware_power_on_and_deassert_reset(waveshare_epaper_handle, PowerOnDelayTicks));
         ESP_ERROR_CHECK(waveshare_epaper_configure_display(waveshare_epaper_handle));
 
-        // Show the test image for 180s
+        ESP_LOGI(TAG, "Drawing horizontal bars test pattern");
+        ESP_ERROR_CHECK(draw_colored_bars_test_pattern(waveshare_epaper_handle, EPD_2IN15G_WIDTH, EPD_2IN15G_HEIGHT, image, image_size, true));
+        ESP_ERROR_CHECK(waveshare_epaper_display_on_refresh_display_off(waveshare_epaper_handle, true));
+        ESP_ERROR_CHECK(waveshare_epaper_hardware_power_off_and_assert_reset(waveshare_epaper_handle, PowerOffDelayTicks));
+        safe_watchdog_wait(180);
+
+TRIGGER_LOGIC_ANALYZER();
+
+        // Power on physically, reset the device and re-configure
+        ESP_ERROR_CHECK(waveshare_epaper_hardware_power_on_and_deassert_reset(waveshare_epaper_handle, PowerOnDelayTicks));
+        ESP_ERROR_CHECK(waveshare_epaper_configure_display(waveshare_epaper_handle));
+
+        ESP_LOGI(TAG, "Drawing vertical bars test pattern");
+        ESP_ERROR_CHECK(draw_colored_bars_test_pattern(waveshare_epaper_handle, EPD_2IN15G_WIDTH, EPD_2IN15G_HEIGHT, image, image_size, false));
+        ESP_ERROR_CHECK(waveshare_epaper_display_on_refresh_display_off(waveshare_epaper_handle, true));
+        ESP_ERROR_CHECK(waveshare_epaper_hardware_power_off_and_assert_reset(waveshare_epaper_handle, PowerOffDelayTicks));
+        safe_watchdog_wait(180);
+
+TRIGGER_LOGIC_ANALYZER();
+
+        // Power on physically, reset the device and re-configure
+        ESP_ERROR_CHECK(waveshare_epaper_hardware_power_on_and_deassert_reset(waveshare_epaper_handle, PowerOnDelayTicks));
+        ESP_ERROR_CHECK(waveshare_epaper_configure_display(waveshare_epaper_handle));
+
+        // Show the Espressif test image for 180s
         ESP_LOGI(TAG, "Drawing Espressif test image");
         ESP_ERROR_CHECK(draw_raw_image(waveshare_epaper_handle, gImage_2in15g, EPD_2IN15G_WIDTH, EPD_2IN15G_HEIGHT, image, image_size));
         ESP_ERROR_CHECK(waveshare_epaper_display_on_refresh_display_off(waveshare_epaper_handle, true));
