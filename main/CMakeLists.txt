@@ -5,7 +5,8 @@
 set(srcs
         "main.c"
         "test_patterns.c"
-        "sample_image2in15.c"
+        
+        "images/sample_image2in15.c"
 )
 
 idf_component_register(

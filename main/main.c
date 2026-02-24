@@ -10,7 +10,7 @@
 
 #include "waveshare-epaper.h"
 #include "test_patterns.h"
-#include "sample_image2in15.h"
+#include "images/sample_image2in15.h"
 
 
 
