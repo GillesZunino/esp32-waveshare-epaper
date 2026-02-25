@@ -8,7 +8,10 @@
 #include <esp_check.h>
 // #include <esp_task_wdt.h>
 
+#include <lvgl.h>
+
 #include "waveshare-epaper.h"
+#include "lvgl_epaper_port.h"
 #include "test_patterns.h"
 #include "images/sample_image2in15.h"
 
@@ -97,7 +100,6 @@ esp_err_t draw_raw_image(waveshare_epaper_handle_t waveshare_epaper_handle, cons
 
 
 
-
 static void safe_watchdog_wait(uint32_t seconds) {
     // Wait in slices to avoid triggering the watchdog - We use CONFIG_ESP_TASK_WDT_TIMEOUT_S (default 5s - customized to 20s) -1 to avoid waking up too frequently
     const uint32_t slice_seconds = CONFIG_ESP_TASK_WDT_TIMEOUT_S - 1;
@@ -149,6 +151,76 @@ esp_err_t trigger_logic_analyzer(gpio_num_t trigger_pin, TickType_t pulse_length
     return ESP_OK;
 }
 
+
+// -----------------------------------------------------------------------------------
+// LVGL e-paper demo
+// -----------------------------------------------------------------------------------
+
+static void run_lvgl_epaper_demo(waveshare_epaper_handle_t handle, uint8_t *image, size_t image_size) {
+    // Initialize LVGL and bind it to the e-paper display.
+    // Must be called after waveshare_epaper_configure_display().
+    ESP_LOGI(TAG, "Initializing LVGL e-paper port");
+    ESP_ERROR_CHECK(lvgl_epaper_port_init(handle, image, image_size));
+
+    // Build a simple demo UI.
+    // All lv_* calls must be wrapped in lock / unlock for thread safety.
+    lvgl_epaper_port_lock(portMAX_DELAY);
+
+    // White background
+    lv_obj_set_style_bg_color(lv_screen_active(), lv_color_white(), LV_PART_MAIN);
+
+    // Title label
+    lv_obj_t *title = lv_label_create(lv_screen_active());
+    lv_label_set_text(title, "LVGL + ePaper");
+    lv_obj_set_style_text_color(title, lv_color_black(), LV_PART_MAIN);
+    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 10);
+
+    // Subtitle
+    lv_obj_t *sub = lv_label_create(lv_screen_active());
+    lv_label_set_text(sub, "Waveshare 2.15\" 4-color");
+    lv_obj_set_style_text_color(sub, lv_color_black(), LV_PART_MAIN);
+    lv_obj_align(sub, LV_ALIGN_TOP_MID, 0, 35);
+
+    // A red rectangle to demonstrate color mapping
+    lv_obj_t *red_box = lv_obj_create(lv_screen_active());
+    lv_obj_set_size(red_box, 60, 30);
+    lv_obj_set_style_bg_color(red_box, lv_color_make(0xFF, 0x00, 0x00), LV_PART_MAIN);
+    lv_obj_set_style_border_width(red_box, 0, LV_PART_MAIN);
+    lv_obj_align(red_box, LV_ALIGN_LEFT_MID, 10, -20);
+
+    lv_obj_t *red_lbl = lv_label_create(lv_screen_active());
+    lv_label_set_text(red_lbl, "Red");
+    lv_obj_set_style_text_color(red_lbl, lv_color_black(), LV_PART_MAIN);
+    lv_obj_align_to(red_lbl, red_box, LV_ALIGN_OUT_BOTTOM_MID, 0, 5);
+
+    // A yellow rectangle
+    lv_obj_t *yel_box = lv_obj_create(lv_screen_active());
+    lv_obj_set_size(yel_box, 60, 30);
+    lv_obj_set_style_bg_color(yel_box, lv_color_make(0xFF, 0xFF, 0x00), LV_PART_MAIN);
+    lv_obj_set_style_border_width(yel_box, 0, LV_PART_MAIN);
+    lv_obj_align(yel_box, LV_ALIGN_RIGHT_MID, -10, -20);
+
+    lv_obj_t *yel_lbl = lv_label_create(lv_screen_active());
+    lv_label_set_text(yel_lbl, "Yellow");
+    lv_obj_set_style_text_color(yel_lbl, lv_color_black(), LV_PART_MAIN);
+    lv_obj_align_to(yel_lbl, yel_box, LV_ALIGN_OUT_BOTTOM_MID, 0, 5);
+
+    // Status label at the bottom
+    lv_obj_t *status = lv_label_create(lv_screen_active());
+    lv_label_set_text_fmt(status, "Next refresh in ~%lu s", EPAPER_LVGL_MIN_REFRESH_MS / 1000UL);
+    lv_obj_set_style_text_color(status, lv_color_black(), LV_PART_MAIN);
+    lv_obj_align(status, LV_ALIGN_BOTTOM_MID, 0, -10);
+
+    lvgl_epaper_port_unlock();
+
+    ESP_LOGI(TAG, "Demo UI created. First hardware refresh in ~%lu s.", EPAPER_LVGL_MIN_REFRESH_MS / 1000UL);
+}
+
+
+// -----------------------------------------------------------------------------------
+// Set to 1 to run the LVGL demo, 0 to run the original test-pattern loop
+// -----------------------------------------------------------------------------------
+#define RUN_LVGL_DEMO 1
 
 
 void app_main(void) {
@@ -235,6 +307,16 @@ TRIGGER_LOGIC_ANALYZER();
     // Configure the display to receive an image - This is required after every poower on / reset
     ESP_ERROR_CHECK(waveshare_epaper_configure_display(waveshare_epaper_handle));
 
+#if RUN_LVGL_DEMO
+
+    // Run the LVGL e-paper demo. The port starts background FreeRTOS tasks
+    // (LVGL handler + throttled e-paper refresh) that drive the display from
+    // this point on. app_main exits via vTaskDelete() after this call.
+    run_lvgl_epaper_demo(waveshare_epaper_handle, image, image_size);
+    // vTaskDelete(NULL);
+
+#else
+
     do {
         // ------------------------------------------------------------------------------------------------------
         // The display is assumed to have been powered on, taken our of reset and configured to display content
@@ -318,4 +400,6 @@ TRIGGER_LOGIC_ANALYZER();
     waveshare_epaper_handle = NULL;
 
     ESP_ERROR_CHECK(spi_bus_free(SPI_HOSTID));
+
+#endif
 }
