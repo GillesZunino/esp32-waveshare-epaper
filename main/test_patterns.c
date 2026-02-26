@@ -46,40 +46,29 @@ esp_err_t draw_hatch_test_pattern(waveshare_epaper_handle_t waveshare_epaper_han
 
 esp_err_t draw_colored_bars_test_pattern(waveshare_epaper_handle_t waveshare_epaper_handle, uint16_t width, uint16_t height, uint8_t* image, size_t image_size, bool horizontal) {
     if (horizontal) {
+        uint16_t bar_width = width / 16;
+         for (uint16_t pixel_height = 0; pixel_height < height; pixel_height++) {
+            memset(image + pixel_height * (width / 4), 0xAA, bar_width);  // 4 pixels Yellow
+            memset(image + (width / 16) + pixel_height * (width / 4), 0xFF, bar_width); // 4 pixels Red
+            memset(image + (2 * (width / 16)) + pixel_height * (width / 4), 0x55, bar_width);  // 4 pixels White
+            memset(image + (3 * (width / 16)) + pixel_height * (width / 4), 0x00, bar_width);  // 4 pixels Black
+        }
+    } else {
         uint16_t bar_height = height / 4;
-        for (uint16_t pixel_height = 0; pixel_height < height; pixel_height += bar_height) {
+        for (uint16_t pixel_height = 0; pixel_height < height; pixel_height++) {
             uint8_t pixel_value = 0;
 
             if (pixel_height < bar_height) {
-                pixel_value = 0x00; // 4 pixels Black
+                pixel_value = 0xAA; // 4 pixels Yellow
             } else if (pixel_height < 2 * bar_height) {
-                pixel_value = 0x55; // 4 pixels White
+                pixel_value = 0xFF; // 4 pixels Red
             } else if (pixel_height < 3 * bar_height) {
-                pixel_value = 0xFF; // 4 pixels Red
-            } else {
-                pixel_value = 0xAA; // 4 pixels Yellow
-            }
-
-            memset(&image[pixel_height * (width / 4)], pixel_value, width / 4);
-        }
-    } else {
-        uint16_t bar_width = width / 4;
-        for (uint16_t pixel_width = 0; pixel_width < width; pixel_width += bar_width) {
-            uint8_t pixel_value = 0;
-
-            if (pixel_width < bar_width) {
-                pixel_value = 0x00; // 4 pixels Black
-            } else if (pixel_width < 2 * bar_width) {
                 pixel_value = 0x55; // 4 pixels White
-            } else if (pixel_width < 3 * bar_width) {
-                pixel_value = 0xFF; // 4 pixels Red
             } else {
-                pixel_value = 0xAA; // 4 pixels Yellow
+                pixel_value = 0x00; // 4 pixels Black
             }
 
-            for (uint16_t pixel_height = 0; pixel_height < height; pixel_height++) {
-                memset(&image[(pixel_height * (width / 4)) + (pixel_width / 4)], pixel_value, bar_width / 4);
-            }
+            memset(image + pixel_height * (width / 4), pixel_value, width / 4);
         }
     }
 
