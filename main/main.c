@@ -313,7 +313,10 @@ TRIGGER_LOGIC_ANALYZER();
     // (LVGL handler + throttled e-paper refresh) that drive the display from
     // this point on. app_main exits via vTaskDelete() after this call.
     run_lvgl_epaper_demo(waveshare_epaper_handle, image, image_size);
-    // vTaskDelete(NULL);
+
+    do {
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    } while (true);
 
 #else
 
