@@ -61,6 +61,16 @@ static lv_color_t s_lvgl_buf2[EPD_WIDTH * LVGL_BUF_LINES];
 //   Code 0x01 = White   (255, 255, 255)
 //   Code 0x02 = Yellow  (255, 255, 0)
 //   Code 0x03 = Red     (255, 0,   0)
+//
+// Two-step approach:
+//   1. Classify pixel as achromatic (gray-scale) or chromatic (colored) based
+//      on channel spread. Achromatic pixels come from font anti-aliasing and
+//      plain backgrounds; chromatic pixels represent intentional color fills.
+//   2. For achromatic pixels use a 75% luminance threshold (BT.601 weighted)
+//      so that font edge pixels at ≥25% opacity map to Black instead of White.
+//      This eliminates the "washed-out" blurriness caused by the previous
+//      50%-luminance Euclidean boundary.
+//      For chromatic pixels use squared Euclidean distance against all 4 colors.
 static uint8_t rgb565_to_epaper_code(uint16_t rgb565) {
     // Unpack RGB565 → 5/6/5 component fields
     uint8_t r5 = (uint8_t)((rgb565 >> 11) & 0x1F);
@@ -72,6 +82,19 @@ static uint8_t rgb565_to_epaper_code(uint16_t rgb565) {
     uint8_t g = (uint8_t)((g6 << 2) | (g6 >> 4));
     uint8_t b = (uint8_t)((b5 << 3) | (b5 >> 2));
 
+    // Step 1: compute channel spread to classify achromatic vs. chromatic
+    uint8_t ch_max = (r > g) ? ((r > b) ? r : b) : ((g > b) ? g : b);
+    uint8_t ch_min = (r < g) ? ((r < b) ? r : b) : ((g < b) ? g : b);
+
+    if ((ch_max - ch_min) < 32u) {
+        // Achromatic pixel (gray-scale): use BT.601 luminance threshold at 75%
+        // (192/255). This ensures font edge pixels at ≥25% opacity → Black,
+        // making anti-aliased text strokes appear bold and crisp.
+        uint32_t luma = (299u * (uint32_t)r + 587u * (uint32_t)g + 114u * (uint32_t)b) / 1000u;
+        return (luma < 192u) ? 0x00u : 0x01u;
+    }
+
+    // Chromatic pixel: find nearest e-paper color via squared Euclidean distance
 #define SQ(v) ((int32_t)(v) * (int32_t)(v))
 
     int32_t d_black  = SQ(r)       + SQ(g)       + SQ(b);
@@ -287,6 +310,11 @@ esp_err_t lvgl_epaper_port_init(waveshare_epaper_handle_t epaper_handle,
                            s_lvgl_buf1, s_lvgl_buf2,
                            sizeof(s_lvgl_buf1),
                            LV_DISPLAY_RENDER_MODE_PARTIAL);
+
+    // Apply the mono theme: flat fills, no gradients, no shadows — optimal for
+    // a 4-color e-paper display.
+    lv_theme_t *mono_theme = lv_theme_mono_init(s_display, false, LV_FONT_DEFAULT);
+    lv_display_set_theme(s_display, mono_theme);
 
     // ------------------------------------------------------------------
     // Start LVGL tick source (ESP timer, 1 ms period)

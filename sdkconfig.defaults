@@ -13,3 +13,10 @@ CONFIG_ESPTOOLPY_HEADER_FLASHSIZE_UPDATE=y
 
 # LVGL: raise SPI ISR to IRAM for smoother DMA transfers
 CONFIG_SPI_MASTER_ISR_IN_IRAM=y
+
+# LVGL: pixel-perfect UNSCII 16 font (1bpp, no anti-aliasing) — better for 4-color e-paper
+CONFIG_LV_FONT_UNSCII_16=y
+CONFIG_LV_FONT_DEFAULT_UNSCII_16=y
+
+# LVGL: mono theme (flat fills, no gradients or shadows) — optimal for 4-color e-paper
+CONFIG_LV_USE_THEME_MONO=y

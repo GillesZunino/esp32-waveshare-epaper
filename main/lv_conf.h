@@ -1,6 +1,11 @@
 // -----------------------------------------------------------------------------------
 // Copyright 2026, Gilles Zunino
 // LVGL v9.x configuration for Waveshare 2.15" 4-color ePaper display
+//
+// NOTE: CONFIG_LV_CONF_SKIP=y is set in sdkconfig, so this file is NOT included
+// by LVGL's lv_conf_internal.h. All LVGL settings are controlled via Kconfig
+// (sdkconfig / sdkconfig.defaults). This file is kept as documentation and as a
+// reference for the intended configuration.
 // -----------------------------------------------------------------------------------
 
 /* clang-format off */
@@ -51,8 +56,9 @@
    FONT USAGE
  *====================*/
 
-#define LV_FONT_MONTSERRAT_14 1
-#define LV_FONT_DEFAULT &lv_font_montserrat_14
+#define LV_FONT_MONTSERRAT_14 0
+#define LV_FONT_UNSCII_16 1
+#define LV_FONT_DEFAULT &lv_font_unscii_16
 
 /*====================
    LOGGING
@@ -79,9 +85,17 @@
  *====================*/
 
 #define LV_USE_THEME_DEFAULT 1
+#define LV_USE_THEME_MONO    1
 
 /* Disable animated state transitions - e-paper displays cannot render them meaningfully */
 #define LV_THEME_DEFAULT_TRANSITION_TIME 0
+
+/*====================
+   RENDERING
+ *====================*/
+
+/* Disable complex gradients (radial, conical, angled) - e-paper cannot represent them */
+#define LV_USE_DRAW_SW_COMPLEX_GRADIENTS  0
 
 /*====================
    DEMO
