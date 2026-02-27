@@ -227,6 +227,9 @@ cleanup:
 }
 
 esp_err_t waveshare_epaper_wait_for_display_ready_private(waveshare_epaper_handle_t handle, TickType_t timeout_ticks) {
+    // Disallow zero timeout
+    ESP_RETURN_ON_FALSE(timeout_ticks > 0, ESP_ERR_INVALID_ARG, WaveshareEPaperLogTag, "timeout_ticks must be greater than zero");
+
     // The display is available when BUSY is HIGH (1)
     const int DISPLAY_NOT_BUSY_LEVEL = 1;
 
