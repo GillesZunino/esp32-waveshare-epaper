@@ -160,7 +160,7 @@ esp_err_t waveshare_epaper_hardware_power_on_and_deassert_reset(waveshare_epaper
 
     // Turn the ePaper display power on - Some models are equipped with a power control pin to physically turn power on or off
     if (handle->hw_config.pwr_io_num != GPIO_NUM_NC) {
-        ESP_RETURN_ON_ERROR(waveshare_epaper_set_hardware_power_private(handle->hw_config.pwr_io_num, WAVESHARE_EPAPER_HARDWARE_POWER_ON), WaveshareEPaperLogTag, "Failed to turn on ePaper power on");
+        ESP_RETURN_ON_ERROR(waveshare_epaper_set_hardware_power_private(handle->hw_config.pwr_io_num, WAVESHARE_EPAPER_HARDWARE_POWER_ON), WaveshareEPaperLogTag, "Failed to turn ePaper power on");
         vTaskDelay(power_on_wait_time);
     }
 
@@ -266,6 +266,7 @@ esp_err_t waveshare_epaper_display_on_refresh_display_off(waveshare_epaper_handl
         return ESP_ERR_INVALID_STATE;
     }
 
+    // TODO: Do we need to wait here ?
     while (!gpio_get_level(handle->hw_config.busy_io_num)) { // Data sheet asks to loop when Busy = LOW and proceed when Busy = HIGH
         vTaskDelay(pdMS_TO_TICKS(1));
     }
@@ -291,7 +292,7 @@ esp_err_t waveshare_epaper_display_on_refresh_display_off(waveshare_epaper_handl
 #else
 
     // Trigger AUTO sequence 0x17 (PON -> DRF -> POF -> DSLP) or 0xA5 (PON -> DRF -> POF) depending on whether we want to enter deep sleep or not
-    // TODO: Do weneed to wait for BUSY on deep sleep requeast as well ?
+    // TODO: Do we need to wait for BUSY on deep sleep request as well ?
 
 // TODO: When deep sleep is desired, we need to send the command separately as the sequence does not fire busy
 
@@ -529,7 +530,7 @@ static DMA_ATTR init_sequence_item_t init_sequence[] = {
         .data_length = 1
     },
 
-    // TODO: Different - PLL. They disable dytnamic frame rate and set refresh to 50Hz
+    // TODO: Different - PLL. They disable dynamic frame rate and set refresh to 50Hz
     // the code below enable dynamic frame rate and set refresh rate to 12.5Hz
     // EPD_2IN15G_SendCommand(0x30);
     // EPD_2IN15G_SendData(0x02);    
@@ -614,7 +615,7 @@ esp_err_t waveshare_epaper_display_refresh(waveshare_epaper_handle_t handle) {
 
 
 esp_err_t test_spi_performance(waveshare_epaper_handle_t handle) {
-    // TODO: REMOVE. this is temporary to test the fastest way to send data over SPI with the logic analyser
+    // TODO: REMOVE. this is temporary to test the fastest way to send data over SPI with the logic analyzer
     return waveshare_epaper_spi_send_private(handle, 0x4D, (const uint8_t[]){0x78}, 1, true, true);
 }
 
@@ -669,7 +670,7 @@ esp_err_t waveshare_epaper_read_temperature(waveshare_epaper_handle_t handle, co
     uint8_t buffer[2] = {0};
     ESP_RETURN_ON_ERROR(waveshare_epaper_spi_send_and_receive_private(handle, WAVESHARE_EPD_CMD_TEMPERATURE_SENSOR_COMMAND, buffer, sizeof(buffer) / sizeof(buffer[0])), WaveshareEPaperLogTag, "Failed to read Temperature (TSC)");
     // TODO: There is an enum for this
-    // TODO: Pass otehr bits
+    // TODO: Pass other bits
     *temperature = buffer[0];
     return ESP_OK;
 }
