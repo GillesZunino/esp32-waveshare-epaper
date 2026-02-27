@@ -110,3 +110,19 @@ esp_err_t waveshare_epaper_spi_send_private(waveshare_epaper_handle_t handle, ui
  * @return ESP_OK on success, or an error code from SPI operations.
  */
 esp_err_t waveshare_epaper_spi_send_and_receive_private(waveshare_epaper_handle_t handle, uint8_t command, uint8_t* response_buffer, uint32_t response_buffer_len);
+
+
+/**
+ * @brief Wait for the display to be ready by reading the BUSY GPIO pin.
+ *
+ * This is a driver-only utility; user applications must not call it directly.
+ *
+ * @param[in] handle  Driver handle for the target display.
+ * @param[in] timeout_ticks Maximum time to wait for BUSY GPIO to reach the desired state.
+ *
+ * @return
+ *      - ESP_OK           BUSY reached the desired state within the specified timeout
+ *      - ESP_ERR_TIMEOUT  Timeout elapsed before BUSY reached the desired state
+ *      - Error code from GPIO operations
+ */
+esp_err_t waveshare_epaper_wait_for_display_ready_private(waveshare_epaper_handle_t handle, TickType_t timeout_ticks);

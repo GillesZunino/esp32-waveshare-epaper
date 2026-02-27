@@ -25,7 +25,7 @@ esp_err_t waveshare_epaper_spi_init_private(const waveshare_epaper_config_t* con
     ESP_GOTO_ON_ERROR(gpio_intr_disable(config->hw_config.busy_io_num), cleanup, WaveshareEPaperLogTag, "Failed to disable BUSY GPIO interrupt");
     ESP_GOTO_ON_ERROR(gpio_isr_handler_add(config->hw_config.busy_io_num, busy_gpio_isr_handler, handle), cleanup, WaveshareEPaperLogTag, "Failed to add BUSY GPIO ISR handler");
 
-    // Pre-initialize all SPI transaction we need in our device handle
+    // Pre-initialize all SPI transactions we need in our device handle
     handle->spi_isr_context.cmd_transaction = (spi_transaction_t) {
         .flags = SPI_TRANS_USE_TXDATA | SPI_TRANS_DMA_BUFFER_ALIGN_MANUAL,
         .cmd = 0,
@@ -48,7 +48,7 @@ esp_err_t waveshare_epaper_spi_init_private(const waveshare_epaper_config_t* con
         .rx_buffer = NULL
     };
 
-    // Add the target Waveshare ePaper device to as an SPI device on the given bus
+    // Add the target Waveshare ePaper device as an SPI device on the given bus
     spi_device_interface_config_t spiDeviceInterfaceConfig = {
         .command_bits = 0,
         .address_bits = 0,
@@ -188,7 +188,7 @@ esp_err_t waveshare_epaper_spi_send_and_receive_private(waveshare_epaper_handle_
         //   * MOSI | N/A       | <Data> | <Data> | <Data> | ... | <Data> |
         //
         // In SPI_DEVICE_HALFDUPLEX mode, it is not possible to have both a TX and RX phase in the same transaction
-        // We also need to toggle to C/D line to COMMAND_LEVEL for the command phase and DATA_LEVEL for the data phase
+        // We also need to toggle the C/D line to COMMAND_LEVEL for the command phase and DATA_LEVEL for the data phase
         //
         // We send two separate transactions with one phase each TX or RX. This allows DMA to be used for both transactions
         // In half duplex, DMA is only supported for transactions with a TX phase or an RX phase but not both at the same time
@@ -223,6 +223,53 @@ esp_err_t waveshare_epaper_spi_send_and_receive_private(waveshare_epaper_handle_
 
 cleanup:
     spi_device_release_bus(handle->spi_device_handle);
+    return ret;
+}
+
+esp_err_t waveshare_epaper_wait_for_display_ready_private(waveshare_epaper_handle_t handle, TickType_t timeout_ticks) {
+    // The display is available when BUSY is HIGH (1)
+    const int DISPLAY_NOT_BUSY_LEVEL = 1;
+
+    // If BUSY is not set, nothing to do
+    esp_err_t ret = ESP_OK;
+    if (gpio_get_level(handle->hw_config.busy_io_num) == DISPLAY_NOT_BUSY_LEVEL) {
+        goto done;
+    }
+
+    // Drain any stale semaphore signal left from a previous operation
+    xSemaphoreTake(handle->gpio_isr_context.busy_semaphore_handle, 0);
+
+    // Enable the BUSY rising-edge interrupt
+    ESP_GOTO_ON_ERROR(gpio_intr_enable(handle->hw_config.busy_io_num), done, WaveshareEPaperLogTag, "Failed to enable BUSY GPIO interrupt");
+
+    // Re-check: BUSY may have gone HIGH between the fast-path
+    if (gpio_get_level(handle->hw_config.busy_io_num) != DISPLAY_NOT_BUSY_LEVEL) {
+        if (xSemaphoreTake(handle->gpio_isr_context.busy_semaphore_handle, timeout_ticks) == pdFALSE) {
+            // Post-timeout re-check: the ISR and the FreeRTOS timeout expiry can race at the last tick
+            // Re-reading the GPIO level here collapses that race window and avoids a false-negative timeout
+            if (gpio_get_level(handle->hw_config.busy_io_num) != DISPLAY_NOT_BUSY_LEVEL) {
+#if CONFIG_WAVESHARE_EPAPER_ENABLE_DEBUG_LOG
+                ESP_LOGE(WaveshareEPaperLogTag, "Timeout waiting for BUSY to go HIGH");
+#endif
+                ret = ESP_ERR_TIMEOUT;
+            }
+        }
+    }
+
+    // Disable BUSY interrupt and drain any spurious signal that arrived during cleanup
+    esp_err_t disable_err = gpio_intr_disable(handle->hw_config.busy_io_num);
+    if (disable_err != ESP_OK) {
+#if CONFIG_WAVESHARE_EPAPER_ENABLE_DEBUG_LOG
+        ESP_LOGE(WaveshareEPaperLogTag, "Failed to disable BUSY GPIO interrupt: %s", esp_err_to_name(disable_err));
+#endif
+        if (ret == ESP_OK) {
+            ret = disable_err;
+        }
+    }
+
+done:
+    // Drain any stale semaphore signal left from a previous operation
+    xSemaphoreTake(handle->gpio_isr_context.busy_semaphore_handle, 0);
     return ret;
 }
 
