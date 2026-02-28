@@ -19,6 +19,9 @@
 
 // TODO: Reorder functions adequately
 
+// Maximum time to wait for the BUSY pin to go HIGH before returning ESP_ERR_TIMEOUT
+static const TickType_t WAVESHARE_EPAPER_BUSY_TIMEOUT_TICKS = pdMS_TO_TICKS(30000);
+
 
 
 static inline esp_err_t waveshare_epaper_set_hardware_power_private(gpio_num_t power_pin, waveshare_epaper_hardware_power_state_t power);
@@ -296,7 +299,7 @@ esp_err_t waveshare_epaper_display_on_refresh_display_off(waveshare_epaper_handl
 
 // TODO: When deep sleep is desired, we need to send the command separately as the sequence does not fire busy
 
-    return waveshare_epaper_spi_send_private(handle, WAVESHARE_EPD_CMD_AUTO_SEQUENCE, (const uint8_t[]){ enter_deepsleep ? 0xA7 : 0xA5 }, 1, true, true);
+    return waveshare_epaper_spi_send_private(handle, WAVESHARE_EPD_CMD_AUTO_SEQUENCE, (const uint8_t[]){ enter_deepsleep ? 0xA7 : 0xA5 }, 1, true, true, WAVESHARE_EPAPER_BUSY_TIMEOUT_TICKS);
 
 #endif
 
@@ -382,7 +385,7 @@ esp_err_t waveshare_epaper_display_power_off_and_sleep(waveshare_epaper_handle_t
 
     //ESP_RETURN_ON_ERROR(waveshare_epaper_sleep_private(handle), WaveshareEPaperLogTag, "Failed to put ePaper display to sleep");
 
-    ESP_RETURN_ON_ERROR(waveshare_epaper_spi_send_private(handle, WAVESHARE_EPD_CMD_DEEP_SLEEP , (const uint8_t[]){ 0xA5 }, 1, true, false), WaveshareEPaperLogTag, "Failed to put ePaper display to sleep");
+    ESP_RETURN_ON_ERROR(waveshare_epaper_spi_send_private(handle, WAVESHARE_EPD_CMD_DEEP_SLEEP , (const uint8_t[]){ 0xA5 }, 1, true, false, 0), WaveshareEPaperLogTag, "Failed to put ePaper display to sleep");
     vTaskDelay(pdMS_TO_TICKS(200));
 
     return ESP_OK;
@@ -390,7 +393,7 @@ esp_err_t waveshare_epaper_display_power_off_and_sleep(waveshare_epaper_handle_t
 
 
 static esp_err_t waveshare_epaper_sleep_private(waveshare_epaper_handle_t handle) {
-    return waveshare_epaper_spi_send_private(handle, WAVESHARE_EPD_CMD_DEEP_SLEEP , (const uint8_t[]){ 0xA5 }, 1, true, true);
+    return waveshare_epaper_spi_send_private(handle, WAVESHARE_EPD_CMD_DEEP_SLEEP , (const uint8_t[]){ 0xA5 }, 1, true, true, WAVESHARE_EPAPER_BUSY_TIMEOUT_TICKS);
 }
 
 
@@ -398,7 +401,7 @@ static esp_err_t waveshare_epaper_power_on_off_private(waveshare_epaper_handle_t
     waveshare_epaper_command_t command = on ? WAVESHARE_EPD_CMD_POWER_ON : WAVESHARE_EPD_CMD_POWER_OFF;
     uint8_t data[1];
     data[0] = on ? 0x06 : (enableEpd ? 0x01 : 0x00);
-    return waveshare_epaper_spi_send_private(handle, command, data, sizeof(data) / sizeof(data[0]), true, true);
+    return waveshare_epaper_spi_send_private(handle, command, data, sizeof(data) / sizeof(data[0]), true, true, WAVESHARE_EPAPER_BUSY_TIMEOUT_TICKS);
 }
 
 
@@ -563,7 +566,7 @@ esp_err_t waveshare_epaper_configure_display(waveshare_epaper_handle_t handle) {
         for (uint16_t index = 0; index < sizeof(init_sequence) / sizeof(init_sequence_item_t); index++) {
             const init_sequence_item_t* item = &init_sequence[index];
             bool isLast = (index == (sizeof(init_sequence) / sizeof(init_sequence_item_t)) - 1);
-            err = waveshare_epaper_spi_send_private(handle, item->command, item->data, item->data_length, false, isLast);
+            err = waveshare_epaper_spi_send_private(handle, item->command, item->data, item->data_length, false, isLast, WAVESHARE_EPAPER_BUSY_TIMEOUT_TICKS);
             if (err != ESP_OK){
                 break;
             }
@@ -583,7 +586,7 @@ esp_err_t waveshare_epaper_send_data_buffer(waveshare_epaper_handle_t handle, co
         return ESP_ERR_INVALID_STATE;
     }
 
-    esp_err_t err = waveshare_epaper_spi_send_private(handle, WAVESHARE_EPD_CMD_DATA_START_TRANSMISSION, buffer, buffer_length, true, true);
+    esp_err_t err = waveshare_epaper_spi_send_private(handle, WAVESHARE_EPD_CMD_DATA_START_TRANSMISSION, buffer, buffer_length, true, true, WAVESHARE_EPAPER_BUSY_TIMEOUT_TICKS);
 
     // TODO: EPD_2IN15G_ReadBusyH()
     return err;
@@ -603,7 +606,7 @@ esp_err_t waveshare_epaper_display_refresh(waveshare_epaper_handle_t handle) {
     }
 
     // Refresh display - We choose VCOM follows LUTC (0x00)
-    esp_err_t err = waveshare_epaper_spi_send_private(handle, WAVESHARE_EPD_CMD_DISPLAY_REFRESH, (const uint8_t[]){ 0x00 }, 1, true, true);
+    esp_err_t err = waveshare_epaper_spi_send_private(handle, WAVESHARE_EPD_CMD_DISPLAY_REFRESH, (const uint8_t[]){ 0x00 }, 1, true, true, WAVESHARE_EPAPER_BUSY_TIMEOUT_TICKS);
 
     // while (!gpio_get_level(handle->hw_config.busy_io_num)) { // Data sheet asks to loop when Busy = LOW and proceed when Busy = HIGH
     //     vTaskDelay(pdMS_TO_TICKS(1));
@@ -616,7 +619,7 @@ esp_err_t waveshare_epaper_display_refresh(waveshare_epaper_handle_t handle) {
 
 esp_err_t test_spi_performance(waveshare_epaper_handle_t handle) {
     // TODO: REMOVE. this is temporary to test the fastest way to send data over SPI with the logic analyzer
-    return waveshare_epaper_spi_send_private(handle, 0x4D, (const uint8_t[]){0x78}, 1, true, true);
+    return waveshare_epaper_spi_send_private(handle, 0x4D, (const uint8_t[]){0x78}, 1, true, true, WAVESHARE_EPAPER_BUSY_TIMEOUT_TICKS);
 }
 
 

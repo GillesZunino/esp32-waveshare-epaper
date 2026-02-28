@@ -91,7 +91,7 @@ esp_err_t waveshare_epaper_spi_free_private(waveshare_epaper_handle_t handle);
  *
  * @return ESP_OK on success, or an error code from SPI/GPIO operations.
  */
-esp_err_t waveshare_epaper_spi_send_private(waveshare_epaper_handle_t handle, uint8_t command, const uint8_t* data, size_t data_len, bool spi_bus_exclusive, bool wait_for_busy);
+esp_err_t waveshare_epaper_spi_send_private(waveshare_epaper_handle_t handle, uint8_t command, const uint8_t* data, size_t data_len, bool spi_bus_exclusive, bool wait_for_busy, TickType_t timeout_ticks);
 
 
 /**
