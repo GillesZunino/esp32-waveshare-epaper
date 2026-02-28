@@ -304,7 +304,7 @@ TRIGGER_LOGIC_ANALYZER();
 #endif
     // ------------------------------------------------------------------------------------------------------
 
-    // Configure the display to receive an image - This is required after every poower on / reset
+    // Configure the display to receive an image - This is required after every power on / reset
     ESP_ERROR_CHECK(waveshare_epaper_configure_display(waveshare_epaper_handle));
 
 #if RUN_LVGL_DEMO
@@ -322,7 +322,7 @@ TRIGGER_LOGIC_ANALYZER();
 
     do {
         // ------------------------------------------------------------------------------------------------------
-        // The display is assumed to have been powered on, taken our of reset and configured to display content
+        // The display is assumed to have been powered on, taken out of reset and configured to display content
         // It is NOT required for the display high voltage to be on (aka 'software power on')
         // ------------------------------------------------------------------------------------------------------
 
