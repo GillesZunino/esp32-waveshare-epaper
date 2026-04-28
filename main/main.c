@@ -208,10 +208,10 @@ TRIGGER_LOGIC_ANALYZER();
     ESP_LOGI(TAG, "Hardware power on and release reset for Waveshare ePaper display");
     ESP_ERROR_CHECK(waveshare_epaper_hardware_power_on_and_deassert_reset(waveshare_epaper_handle, PowerOnDelayTicks));
 
+#if READ_FROM_DISPLAY
     // ------------------------------------------------------------------------------------------------------
     // Read metadata from display
     // ------------------------------------------------------------------------------------------------------
-#if READ_FROM_DISPLAY
     uint16_t internal_temp = 0;
     ESP_ERROR_CHECK(waveshare_epaper_read_temperature(waveshare_epaper_handle, WAVESHARE_EPAPER_TEMPERATURE_INTERNAL_SENSOR, &internal_temp));
 
@@ -229,8 +229,9 @@ TRIGGER_LOGIC_ANALYZER();
 
     uint8_t revision2 = 0;
     ESP_ERROR_CHECK(waveshare_epaper_read_revision2(waveshare_epaper_handle, &revision2));
-#endif
     // ------------------------------------------------------------------------------------------------------
+#endif
+
 
     // Configure the display to receive an image - This is required after every power on / reset
     ESP_ERROR_CHECK(waveshare_epaper_configure_display(waveshare_epaper_handle));
