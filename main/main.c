@@ -5,8 +5,9 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
+#include <esp_log.h>
 #include <esp_check.h>
-// #include <esp_task_wdt.h>
+#include <driver/gpio.h>
 
 #include "waveshare-epaper.h"
 #include "test_patterns.h"
@@ -14,7 +15,7 @@
 
 
 
-const char* TAG = "wepd_main";
+static const char* DRAM_ATTR TAG = "wepd_main";
 
 //
 // NOTE: For maximum performance, prefer IO MUX over GPIO Matrix routing
@@ -35,6 +36,7 @@ const gpio_num_t BUSY_PIN = ;
 const gpio_num_t RST_PIN = ;
 const gpio_num_t DATA_CMD_PIN = ;
 
+const gpio_num_t SHUTDOWN_BUTTON_PIN = ;
 const gpio_num_t LOGIC_ANALYZER_TRIGGER_PIN = ;
 #else
 #if CONFIG_IDF_TARGET_ESP32S3
@@ -47,6 +49,7 @@ const gpio_num_t BUSY_PIN = GPIO_NUM_9;
 const gpio_num_t RST_PIN = GPIO_NUM_13;
 const gpio_num_t DATA_CMD_PIN = GPIO_NUM_14;
 
+const gpio_num_t SHUTDOWN_BUTTON_PIN = GPIO_NUM_47;
 const gpio_num_t LOGIC_ANALYZER_TRIGGER_PIN = GPIO_NUM_6;
 #else
 #if CONFIG_IDF_TARGET_ESP32C3
@@ -59,6 +62,7 @@ const gpio_num_t BUSY_PIN = ;
 const gpio_num_t RST_PIN = ;
 const gpio_num_t DATA_CMD_PIN = ;
 
+const gpio_num_t SHUTDOWN_BUTTON_PIN = ;
 const gpio_num_t LOGIC_ANALYZER_TRIGGER_PIN = ;
 #endif
 #endif
@@ -94,24 +98,6 @@ esp_err_t draw_raw_image(waveshare_epaper_handle_t waveshare_epaper_handle, cons
     return waveshare_epaper_send_data_buffer(waveshare_epaper_handle, image, image_size);
 }
 
-
-
-
-
-static void safe_watchdog_wait(uint32_t seconds) {
-    // Wait in slices to avoid triggering the watchdog - We use CONFIG_ESP_TASK_WDT_TIMEOUT_S (default 5s - customized to 20s) -1 to avoid waking up too frequently
-    const uint32_t slice_seconds = CONFIG_ESP_TASK_WDT_TIMEOUT_S - 1;
-    const TickType_t slice_ticks = pdMS_TO_TICKS(slice_seconds * 1000);
-    const uint32_t total_slices = seconds / slice_seconds;
-    for (uint32_t slice_count = 0; slice_count < total_slices; slice_count++) {
-        vTaskDelay(slice_ticks);
-    }
-
-    uint32_t remaining_seconds = seconds % slice_seconds;
-    if (remaining_seconds > 0) {
-        vTaskDelay(pdMS_TO_TICKS(remaining_seconds * 1000));
-    }
-}
 
 
 #ifdef ENABLE_LOGIC_ANALYZER
@@ -151,7 +137,73 @@ esp_err_t trigger_logic_analyzer(gpio_num_t trigger_pin, TickType_t pulse_length
 
 
 
+#define WAIT_OR_SHUTDOWN(seconds) do { \
+    if (wait_or_shutdown(seconds)) { \
+        goto shutdown; \
+    } \
+} while(0)
+
+SemaphoreHandle_t shutdown_request_semaphore;
+
+static bool wait_or_shutdown(uint32_t seconds) {
+    bool should_stop = false;
+    if (xSemaphoreTake(shutdown_request_semaphore, pdMS_TO_TICKS(seconds * 1000)) == pdTRUE) {
+        should_stop = true;
+    }
+
+    return should_stop;
+}
+
+static void IRAM_ATTR gpio_common_isr_handler(void* arg) {
+    static bool shutdown_requested = false;
+    static BaseType_t xHigherPriorityTaskWoken;
+
+    // Debounce logic - We only consider the first falling edge as a valid shutdown request and ignore subsequent edges until the system is restarted
+    if (!shutdown_requested) {
+        
+        ESP_DRAM_LOGI(TAG, "Shutdown request received - Will blank display and terminate at the next opportunity");
+
+        shutdown_requested = true;
+        xHigherPriorityTaskWoken = pdFALSE;
+
+        if (xSemaphoreGiveFromISR(shutdown_request_semaphore, &xHigherPriorityTaskWoken) == pdFALSE) {
+            ESP_DRAM_LOGE(TAG, "Failed to signal shutdown request from GPIO ISR");
+        } else {
+            if (xHigherPriorityTaskWoken == pdTRUE) {
+                portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+            }
+        }
+    }
+}
+
+static esp_err_t register_shutdown_button(gpio_num_t shutdown_button_pin) {
+    const int ESP_INTR_FLAG_NONE = 0;
+
+    // Create communication sempahore
+    shutdown_request_semaphore = xSemaphoreCreateBinary();
+    ESP_RETURN_ON_FALSE(shutdown_request_semaphore != NULL, ESP_ERR_NO_MEM, TAG, "Failed to create shutdown request semaphore");
+
+    // Ensure GPIO ISR Services have been isntalled
+    esp_err_t err = gpio_install_isr_service(ESP_INTR_FLAG_NONE);
+    err = (err == ESP_OK || err == ESP_ERR_INVALID_STATE) ? ESP_OK : err;
+    ESP_RETURN_ON_FALSE(err == ESP_OK, err, TAG, "GPIO ISR service installation failed");
+
+    gpio_config_t shutdown_button_io_conf = {
+        .pin_bit_mask = BIT64(shutdown_button_pin),
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_ENABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_NEGEDGE
+    };
+
+    ESP_RETURN_ON_ERROR(gpio_config(&shutdown_button_io_conf), TAG, "Failed to configure GPIO for shutdown button");
+    ESP_RETURN_ON_ERROR(gpio_isr_handler_add(shutdown_button_pin, gpio_common_isr_handler, nullptr), TAG, "Failed to add ISR handler for shutdown button");
+    return ESP_OK;
+}
+
 void app_main(void) {
+    // Register a button to trigger then end of the application - This blanks the display, shut it down ...
+    ESP_ERROR_CHECK(register_shutdown_button(SHUTDOWN_BUTTON_PIN));
 
 TRIGGER_LOGIC_ANALYZER();
 
@@ -247,7 +299,7 @@ TRIGGER_LOGIC_ANALYZER();
         ESP_ERROR_CHECK(draw_hatch_test_pattern(waveshare_epaper_handle, EPD_2IN15G_WIDTH, EPD_2IN15G_HEIGHT, image, image_size));
         ESP_ERROR_CHECK(waveshare_epaper_display_on_refresh_display_off(waveshare_epaper_handle, true));
         ESP_ERROR_CHECK(waveshare_epaper_hardware_power_off_and_assert_reset(waveshare_epaper_handle, PowerOffDelayTicks));
-        safe_watchdog_wait(180);
+        WAIT_OR_SHUTDOWN(180);
 
 TRIGGER_LOGIC_ANALYZER();
 
@@ -259,7 +311,7 @@ TRIGGER_LOGIC_ANALYZER();
         ESP_ERROR_CHECK(draw_colored_bars_test_pattern(waveshare_epaper_handle, EPD_2IN15G_WIDTH, EPD_2IN15G_HEIGHT, image, image_size, true));
         ESP_ERROR_CHECK(waveshare_epaper_display_on_refresh_display_off(waveshare_epaper_handle, true));
         ESP_ERROR_CHECK(waveshare_epaper_hardware_power_off_and_assert_reset(waveshare_epaper_handle, PowerOffDelayTicks));
-        safe_watchdog_wait(180);
+        WAIT_OR_SHUTDOWN(180);
 
 TRIGGER_LOGIC_ANALYZER();
 
@@ -271,7 +323,7 @@ TRIGGER_LOGIC_ANALYZER();
         ESP_ERROR_CHECK(draw_colored_bars_test_pattern(waveshare_epaper_handle, EPD_2IN15G_WIDTH, EPD_2IN15G_HEIGHT, image, image_size, false));
         ESP_ERROR_CHECK(waveshare_epaper_display_on_refresh_display_off(waveshare_epaper_handle, true));
         ESP_ERROR_CHECK(waveshare_epaper_hardware_power_off_and_assert_reset(waveshare_epaper_handle, PowerOffDelayTicks));
-        safe_watchdog_wait(180);
+        WAIT_OR_SHUTDOWN(180);
 
 TRIGGER_LOGIC_ANALYZER();
 
@@ -284,7 +336,7 @@ TRIGGER_LOGIC_ANALYZER();
         ESP_ERROR_CHECK(draw_raw_image(waveshare_epaper_handle, gImage_2in15g, EPD_2IN15G_WIDTH, EPD_2IN15G_HEIGHT, image, image_size));
         ESP_ERROR_CHECK(waveshare_epaper_display_on_refresh_display_off(waveshare_epaper_handle, true));
         ESP_ERROR_CHECK(waveshare_epaper_hardware_power_off_and_assert_reset(waveshare_epaper_handle, PowerOffDelayTicks));
-        safe_watchdog_wait(180);
+        WAIT_OR_SHUTDOWN(180);
 
 TRIGGER_LOGIC_ANALYZER();
 
@@ -297,7 +349,7 @@ TRIGGER_LOGIC_ANALYZER();
         ESP_ERROR_CHECK(blank_display(waveshare_epaper_handle, width, height, image, image_size));
         ESP_ERROR_CHECK(waveshare_epaper_display_on_refresh_display_off(waveshare_epaper_handle, true));
         ESP_ERROR_CHECK(waveshare_epaper_hardware_power_off_and_assert_reset(waveshare_epaper_handle, PowerOffDelayTicks));
-        safe_watchdog_wait(180);
+        WAIT_OR_SHUTDOWN(180);
 
 TRIGGER_LOGIC_ANALYZER();
 
@@ -306,6 +358,15 @@ TRIGGER_LOGIC_ANALYZER();
         ESP_ERROR_CHECK(waveshare_epaper_configure_display(waveshare_epaper_handle));
     } while (true);
 
+
+shutdown:
+    ESP_LOGI(TAG, "Shutting down display and exiting application");
+
+TRIGGER_LOGIC_ANALYZER();
+
+    // At this popint the display will be powered off and in reset - Get it ready to receive commands
+    ESP_ERROR_CHECK(waveshare_epaper_hardware_power_on_and_deassert_reset(waveshare_epaper_handle, PowerOnDelayTicks));
+    ESP_ERROR_CHECK(waveshare_epaper_configure_display(waveshare_epaper_handle));
 
     // Blank the display as it might be left unused for long periods of time
     ESP_ERROR_CHECK(blank_display(waveshare_epaper_handle, width, height, image, image_size));
@@ -319,4 +380,10 @@ TRIGGER_LOGIC_ANALYZER();
     waveshare_epaper_handle = NULL;
 
     ESP_ERROR_CHECK(spi_bus_free(SPI_HOSTID));
+
+    // Signal end of application
+    ESP_LOGI(TAG, "Application stopped");
+    while (true) {
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
 }

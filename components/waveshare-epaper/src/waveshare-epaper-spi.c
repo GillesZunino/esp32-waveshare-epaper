@@ -121,8 +121,8 @@ esp_err_t waveshare_epaper_spi_free_private(waveshare_epaper_handle_t handle) {
 }
 
 esp_err_t waveshare_epaper_spi_send_private(waveshare_epaper_handle_t handle, uint8_t command, const uint8_t* data, size_t data_len, bool spi_bus_exclusive, bool wait_for_busy, TickType_t timeout_ticks) {
-    // Disallow zero timeout
-    ESP_RETURN_ON_FALSE(timeout_ticks > 0, ESP_ERR_INVALID_ARG, WaveshareEPaperLogTag, "timeout_ticks must be greater than zero");
+    // Disallow zero timeout when asked to wait for busy - A zero timeout would cause the function to return immediately without waiting at all
+    ESP_RETURN_ON_FALSE(!wait_for_busy || (timeout_ticks > 0), ESP_ERR_INVALID_ARG, WaveshareEPaperLogTag, "timeout_ticks must be greater than zero");
     
     // Acquire the SPI bus exclusively if requested
     if (spi_bus_exclusive) {

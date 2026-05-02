@@ -784,7 +784,8 @@ static esp_err_t configure_gpio_pins_private(const waveshare_epaper_config_t* co
 
     // Install ISR service if not already done - ESP_ERR_INVALID_STATE means "service already installed"
     ret = gpio_install_isr_service(ESP_INTR_FLAG_IRAM);
-    ESP_RETURN_ON_FALSE((ret == ESP_OK) || (ret == ESP_ERR_INVALID_STATE), ESP_OK, WaveshareEPaperLogTag, "GPIO ISR service installation failed");
+    ret = (ret == ESP_OK || ret == ESP_ERR_INVALID_STATE) ? ESP_OK : ret;
+    ESP_RETURN_ON_FALSE(ret == ESP_OK, ret, WaveshareEPaperLogTag, "GPIO ISR service installation failed");
 
     // Configure CS pin - The pin level is initially set to HIGH to deselect the device
     gpio_config_t cs_io_conf = {
